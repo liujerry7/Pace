@@ -2,254 +2,519 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#000000">
-  <title>Pace Voice Code</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0c0c10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+  <!-- Installable app: "Add to Home Screen" on iPhone, "Install app" in Chrome -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Pace">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Pace</title>
   <style>
-    /* ---------- Theme: dark, high contrast, big text (readable on a TV) ---------- */
+    /* ---------- Design tokens (dark by default, light follows the system) ---------- */
     :root {
-      --bg: #000000;
-      --panel: #121212;
-      --border: #3a3a3a;
-      --text: #ffffff;
-      --muted: #b0b0b0;
-      --accent: #ffd400;      /* yellow: ready */
-      --live: #ff3b3b;        /* red: listening */
-      --think: #4da3ff;       /* blue: Claude is thinking */
-      --speak: #3ddc84;       /* green: Claude is speaking */
+      color-scheme: dark;
+      --bg: #0c0c10;
+      --glow: rgba(244, 183, 64, .09);
+      --surface: #15151b;
+      --surface-2: #1d1d25;
+      --border: rgba(255, 255, 255, .08);
+      --text: #ececf1;
+      --muted: #8d8d9a;
+      --faint: #5d5d6a;
+      --accent: #f4b740;
+      --accent-ink: #1c1405;
+      --live: #ff5d5d;
+      --think: #6aa8ff;
+      --speak: #4ade80;
+      --user-bubble: #262014;
+      --user-border: rgba(244, 183, 64, .22);
+      --error-bg: rgba(255, 93, 93, .12);
+      --error: #ff8f8f;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .5);
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --bg: #f6f5f2;
+        --glow: rgba(244, 183, 64, .2);
+        --surface: #ffffff;
+        --surface-2: #f0eee9;
+        --border: rgba(0, 0, 0, .09);
+        --text: #1b1b20;
+        --muted: #6b6b77;
+        --faint: #a3a3ad;
+        --accent: #eaa21c;
+        --user-bubble: #fdf0d5;
+        --user-border: rgba(234, 162, 28, .35);
+        --error-bg: rgba(220, 38, 38, .08);
+        --error: #b42318;
+        --shadow: 0 18px 50px rgba(0, 0, 0, .14);
+      }
     }
 
     * { box-sizing: border-box; }
-
-    html, body {
-      margin: 0;
-      min-height: 100%;
-      background: var(--bg);
-      color: var(--text);
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
-
+    html, body { margin: 0; height: 100%; }
     body {
+      background: radial-gradient(1100px 520px at 50% -12%, var(--glow), transparent 65%), var(--bg);
+      color: var(--text);
+      font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -webkit-tap-highlight-color: transparent;
+      overflow: hidden;
+    }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    svg { display: block; }
+
+    .app {
+      height: 100dvh;
+      max-width: 800px;
+      margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      padding: 16px;
-      max-width: 1400px;
-      margin: 0 auto;
-      height: 100dvh;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
     }
 
-    header {
+    /* ---------- Header ---------- */
+    .top {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      flex-wrap: wrap;
+      padding: 14px 16px 10px;
     }
-    h1 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.5rem); }
-
-    button { font: inherit; cursor: pointer; }
-
-    /* Small outlined buttons (settings, mode, copy, clear) */
-    .btn {
-      font-size: clamp(1.1rem, 2.2vw, 1.6rem);
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 20px;
       font-weight: 700;
-      padding: 12px 18px;
-      background: var(--panel);
-      color: var(--text);
-      border: 2px solid var(--text);
-      border-radius: 14px;
+      letter-spacing: -.02em;
     }
-    .btn:active { background: #333; }
-    .btn[aria-pressed="true"] { background: var(--text); color: #000; }
-
-    /* ---------- Settings panel (API key) ---------- */
-    #settings {
-      display: none;
-      flex-direction: column;
-      gap: 12px;
-      padding: 16px;
-      background: var(--panel);
-      border: 2px solid var(--accent);
-      border-radius: 16px;
-      font-size: clamp(1rem, 2vw, 1.4rem);
-    }
-    #settings.open { display: flex; }
-    #settings p { margin: 0; color: var(--muted); }
-    #settings .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-    #settings h2 { margin: 8px 0 0; font-size: 1.1em; color: var(--accent); }
-    #settings label { flex: 0 0 auto; color: var(--muted); }
-    #settings input, #settings select {
-      flex: 1 1 260px;
-      font-size: 1.2em;
-      padding: 12px;
-      background: #000;
-      color: var(--text);
-      border: 2px solid var(--border);
-      border-radius: 10px;
-    }
-
-    /* Status / error line */
-    #status {
-      font-size: clamp(1.1rem, 2.2vw, 1.6rem);
-      color: var(--muted);
-      min-height: 1.4em;
-    }
-    #status.error {
-      color: #000;
-      background: var(--live);
-      padding: 12px 16px;
-      border-radius: 10px;
-      font-weight: 700;
-    }
-
-    /* ---------- The big talk button ---------- */
-    #talk {
-      width: 100%;
-      min-height: 150px;
-      font-size: clamp(2rem, 6vw, 4rem);
-      font-weight: 800;
-      color: #000;
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
       background: var(--accent);
+      box-shadow: 0 0 12px var(--accent);
+      transition: background .3s, box-shadow .3s;
+    }
+    [data-phase="listening"] .dot { background: var(--live);  box-shadow: 0 0 12px var(--live); }
+    [data-phase="thinking"]  .dot { background: var(--think); box-shadow: 0 0 12px var(--think); }
+    [data-phase="speaking"]  .dot { background: var(--speak); box-shadow: 0 0 12px var(--speak); }
+    .top-actions { display: flex; align-items: center; gap: 8px; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+    }
+    .icon-btn {
+      width: 40px; height: 40px;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      color: var(--muted);
+      transition: color .15s, background .15s;
+    }
+    .icon-btn:hover, .pill:hover { color: var(--text); background: var(--surface-2); }
+    .icon-btn svg { width: 19px; height: 19px; }
+
+    /* ---------- Status line ---------- */
+    #status {
+      margin: 0 16px 6px;
+      font-size: 14px;
+      color: var(--muted);
+      text-align: center;
+    }
+    #status:empty { display: none; }
+    #status.error {
+      color: var(--error);
+      background: var(--error-bg);
+      border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+      padding: 10px 14px;
+      border-radius: 12px;
+      text-align: left;
+    }
+
+    /* ---------- Conversation ---------- */
+    #scroller {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 8px 16px 20px;
+    }
+    .empty {
+      margin: 16vh auto 0;
+      max-width: 420px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .empty h2 { margin: 0 0 8px; font-size: 24px; letter-spacing: -.02em; color: var(--text); }
+    .empty p { margin: 0; font-size: 15px; }
+    #scroller:has(#transcript li) .empty { display: none; }
+
+    #transcript {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    #transcript li { min-width: 0; overflow-wrap: anywhere; animation: rise .25s ease-out; }
+    @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+    #transcript li.user {
+      align-self: flex-end;
+      max-width: 85%;
+      padding: 10px 15px;
+      background: var(--user-bubble);
+      border: 1px solid var(--user-border);
+      border-radius: 20px 20px 6px 20px;
+    }
+    #transcript li.assistant { font-size: 16.5px; line-height: 1.65; }
+    #transcript li.note {
+      color: var(--muted);
+      font-style: italic;
+      font-size: 14.5px;
+      padding-left: 12px;
+      border-left: 2px solid var(--border);
+    }
+    #transcript li.tool {
+      align-self: flex-start;
+      max-width: 100%;
+      padding: 5px 12px;
+      font: 12.5px/1.5 var(--mono);
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #transcript li.info {
+      align-self: center;
+      text-align: center;
+      font-size: 13.5px;
+      color: var(--muted);
+    }
+    #transcript li.info a { color: var(--accent); text-decoration: none; }
+    #transcript pre {
+      margin: 10px 0;
+      padding: 12px 14px;
+      background: #0a0a0d;
+      color: #e6e6ea;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow-x: auto;
+      font: 13.5px/1.55 var(--mono);
+      white-space: pre;
+    }
+
+    /* ---------- Bottom dock: live words, the orb, quick actions ---------- */
+    .dock {
+      padding: 6px 16px calc(14px + env(safe-area-inset-bottom));
+      background: linear-gradient(to top, var(--bg) 65%, transparent);
+    }
+    #live {
+      min-height: 1.6em;
+      margin: 0 auto 12px;
+      max-width: 600px;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 500;
+      overflow-wrap: anywhere;
+    }
+    #live:empty::before { content: attr(data-placeholder); color: var(--faint); font-size: 15px; font-weight: 400; }
+    .controls { display: flex; align-items: center; justify-content: center; gap: 32px; }
+    .controls .icon-btn { width: 46px; height: 46px; }
+
+    #talk {
+      position: relative;
+      width: 84px; height: 84px;
+      display: grid;
+      place-items: center;
+      padding: 0;
       border: none;
-      border-radius: 24px;
-      /* Stop phones from selecting text / showing menus on long press */
+      border-radius: 50%;
+      color: var(--accent-ink);
+      background: radial-gradient(circle at 32% 26%, #ffd889, var(--accent) 55%, #d98a10);
+      box-shadow: 0 10px 30px rgba(244, 183, 64, .35);
+      transition: transform .15s, background .3s, box-shadow .3s;
       user-select: none;
       -webkit-user-select: none;
       -webkit-touch-callout: none;
       touch-action: none;
     }
-    #talk.listening { background: var(--live); color: #fff; box-shadow: 0 0 0 8px rgba(255,59,59,.35); }
-    #talk.thinking  { background: var(--think); }
-    #talk.speaking  { background: var(--speak); }
-    #talk:disabled  { background: #444; color: #888; cursor: not-allowed; }
+    #talk svg { width: 32px; height: 32px; }
+    #talk:active { transform: scale(.95); }
+    #talk.listening {
+      color: #fff;
+      background: radial-gradient(circle at 32% 26%, #ffa3a3, var(--live) 60%, #d63c3c);
+      animation: pulse 1.4s ease-out infinite;
+    }
+    #talk.thinking {
+      color: #fff;
+      background: radial-gradient(circle at 32% 26%, #b3d2ff, var(--think) 60%, #3d7fe0);
+      box-shadow: 0 10px 30px rgba(106, 168, 255, .3);
+    }
+    #talk.thinking::after {
+      content: "";
+      position: absolute;
+      inset: -7px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--think);
+      border-right-color: var(--think);
+      animation: spin 1s linear infinite;
+    }
+    #talk.speaking {
+      color: #06240f;
+      background: radial-gradient(circle at 32% 26%, #b4f5cc, var(--speak) 60%, #22b35c);
+      animation: breathe 1.6s ease-in-out infinite;
+    }
+    #talk:disabled { background: var(--surface-2); color: var(--faint); box-shadow: none; cursor: not-allowed; }
+    @keyframes pulse { from { box-shadow: 0 0 0 0 rgba(255, 93, 93, .5); } to { box-shadow: 0 0 0 24px rgba(255, 93, 93, 0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes breathe { 50% { transform: scale(1.06); box-shadow: 0 0 0 12px rgba(74, 222, 128, .12); } }
+    .talk-label { margin-top: 10px; text-align: center; font-size: 13.5px; color: var(--muted); }
 
-    /* ---------- Live text: what's being heard right now ---------- */
-    #live {
-      min-height: 2.6em;
-      padding: 16px 20px;
-      background: var(--panel);
-      border: 2px solid var(--border);
-      border-radius: 16px;
-      font-size: clamp(1.8rem, 5vw, 3.5rem);
-      line-height: 1.25;
-      font-weight: 600;
-      word-wrap: break-word;
+    @media (min-width: 768px) {
+      .top { padding: 22px 24px 14px; }
+      #scroller { padding: 8px 24px 24px; }
+      #transcript li.assistant { font-size: 17px; }
+      #talk { width: 92px; height: 92px; }
     }
-    #live:empty::before { content: attr(data-placeholder); color: var(--muted); font-weight: 400; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
 
-    .toolbar { display: flex; gap: 12px; flex-wrap: wrap; }
-    .toolbar .btn { flex: 1 1 140px; }
-
-    /* ---------- Conversation: numbered lines, newest at the bottom ---------- */
-    #transcript {
-      flex: 1 1 auto;
-      min-height: 200px;
-      overflow-y: auto;
-      margin: 0;
-      padding: 12px 20px 12px 0;
-      list-style: none;
-      counter-reset: line;
-      background: var(--panel);
-      border: 2px solid var(--border);
-      border-radius: 16px;
-      font-size: clamp(1.3rem, 3vw, 2.2rem);
-      line-height: 1.4;
-    }
-    #transcript li {
-      counter-increment: line;
-      display: flex;
-      gap: 16px;
-      padding: 8px 0;
-      border-bottom: 1px solid #222;
-    }
-    #transcript li::before {
-      content: counter(line);
-      flex: 0 0 3ch;
-      text-align: right;
-      color: var(--accent);
-      font-weight: 700;
-    }
-    #transcript .body { flex: 1; min-width: 0; word-break: break-word; }
-    #transcript .who  { font-weight: 800; margin-right: .4em; }
-    #transcript li.user .who      { color: var(--accent); }
-    #transcript li.assistant .who { color: var(--speak); }
-    #transcript li.info           { color: var(--muted); font-style: italic; }
-    #transcript li.tool           { color: var(--think); font-size: .8em; }
-    #transcript pre {
-      margin: 8px 0 0;
-      padding: 12px 16px;
-      background: #000;
+    /* ---------- Settings sheet ---------- */
+    dialog {
+      width: min(560px, calc(100% - 32px));
+      max-height: 88dvh;
+      padding: 0;
+      color: var(--text);
+      background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow-x: auto;
-      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-      font-size: .9em;
-      color: #e6e6e6;
-      white-space: pre;
+      border-radius: 22px;
+      box-shadow: var(--shadow);
     }
+    dialog::backdrop { background: rgba(0, 0, 0, .5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+    @media (max-width: 640px) {
+      dialog {
+        width: 100%;
+        max-width: 100%;
+        margin: auto 0 0;
+        border-radius: 22px 22px 0 0;
+        border-bottom: none;
+      }
+    }
+    .sheet { display: flex; flex-direction: column; max-height: 88dvh; }
+    .sheet-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 20px 8px;
+    }
+    .sheet-head h2 { margin: 0; font-size: 19px; letter-spacing: -.01em; }
+    .sheet-body { overflow-y: auto; padding: 4px 20px 20px; }
+    .sheet-body section { padding: 16px 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+    .sheet-body section:first-child { border-top: none; padding-top: 6px; }
+    .sheet-body h3 { margin: 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    .sheet-body h3 .opt { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--faint); }
+    .field label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 600; }
+    .hint { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+    .field input, .field select {
+      width: 100%;
+      padding: 12px 14px;
+      font: 16px/1.3 inherit;   /* 16px stops iPhone from zooming in */
+      color: var(--text);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .field input:focus, .field select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+    }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn {
+      padding: 12px 18px;
+      font-size: 15px;
+      font-weight: 600;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .btn:hover { border-color: var(--faint); }
+    .btn.primary { flex: 1; color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+    .btn.danger { color: var(--error); align-self: flex-start; }
+    .sheet-foot {
+      display: flex;
+      gap: 10px;
+      padding: 14px 20px calc(14px + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--border);
+    }
+
+    /* ---------- Passcode lock screen ---------- */
+    .lock {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: radial-gradient(900px 480px at 50% -10%, var(--glow), transparent 65%), var(--bg);
+    }
+    .lock[hidden] { display: none; }
+    .lock-card { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 14px; text-align: center; }
+    .lock-card .brand { justify-content: center; font-size: 30px; margin-bottom: 4px; }
+    .lock-card .dot { width: 14px; height: 14px; }
+    .lock-card p { margin: 0; color: var(--muted); font-size: 15px; }
+    .lock-error { min-height: 1.3em; color: var(--error) !important; font-size: 14px !important; }
+    .link { background: none; border: none; color: var(--muted); font-size: 13.5px; text-decoration: underline; }
   </style>
 </head>
-<body>
-  <header>
-    <h1>🎙️ Pace</h1>
-    <div class="toolbar">
-      <button id="modeBtn" class="btn" type="button">🔁 Hands-free</button>
-      <button id="settingsBtn" class="btn" type="button">⚙️ Settings</button>
-    </div>
-  </header>
+<body data-phase="idle">
+  <div class="app">
+    <header class="top">
+      <div class="brand"><span class="dot"></span>Pace</div>
+      <div class="top-actions">
+        <button id="modeBtn" class="pill" type="button">Hands-free</button>
+        <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </header>
 
-  <!-- Settings. Everything here is stored only in this browser (localStorage). -->
-  <section id="settings" aria-label="Settings">
-    <h2>Claude</h2>
-    <p>Your Anthropic API key. Saved only in this browser and sent only to api.anthropic.com.
-       Without a key, Pace just transcribes.</p>
-    <div class="row">
-      <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
-    </div>
-    <div class="row">
-      <label for="effortInput">Effort</label>
-      <select id="effortInput">
-        <option value="low">Low: fastest replies</option>
-        <option value="medium">Medium: balanced</option>
-        <option value="high">High: harder coding</option>
-        <option value="xhigh">Extra high: hardest coding (slow)</option>
-      </select>
-    </div>
+    <div id="status" role="status" aria-live="polite"></div>
 
-    <h2>Code in a GitHub repo (optional)</h2>
-    <p>Lets Claude read your repo and commit changes. Changes go to the work branch below
-       (created from the default branch if it doesn't exist), never straight to your default branch.
-       Use a fine-grained token limited to this repo with <b>Contents: Read and write</b>.
-       The token is sent only to api.github.com.</p>
-    <div class="row">
-      <input id="ghRepoInput" type="text" autocomplete="off" spellcheck="false" placeholder="owner/repo">
-      <input id="ghBranchInput" type="text" autocomplete="off" spellcheck="false" placeholder="work branch (default: pace)">
-    </div>
-    <div class="row">
-      <input id="ghTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_...">
-    </div>
+    <main id="scroller">
+      <div class="empty">
+        <h2>What are we building?</h2>
+        <p>Tap the mic and talk. Claude answers out loud, and with a repo connected in Settings, it writes the code too.</p>
+      </div>
+      <!-- Finished lines (yours and Claude's) get added here -->
+      <ol id="transcript"></ol>
+    </main>
 
-    <div class="row">
-      <button id="saveKey" class="btn" type="button">Save</button>
-      <button id="forgetKey" class="btn" type="button">Forget keys</button>
-    </div>
-  </section>
-
-  <div id="status" role="status" aria-live="polite"></div>
-
-  <button id="talk" type="button">Start conversation</button>
-
-  <!-- What is being heard right now -->
-  <div id="live" aria-live="polite" data-placeholder=""></div>
-
-  <div class="toolbar">
-    <button id="copy" class="btn" type="button">Copy all</button>
-    <button id="clear" class="btn" type="button">Clear</button>
+    <footer class="dock">
+      <!-- What is being heard right now -->
+      <div id="live" aria-live="polite" data-placeholder=""></div>
+      <div class="controls">
+        <button id="copy" class="icon-btn" type="button" aria-label="Copy conversation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button id="talk" type="button" aria-label="Start conversation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
+        </button>
+        <button id="clear" class="icon-btn" type="button" aria-label="New conversation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </button>
+      </div>
+      <div id="talkLabel" class="talk-label"></div>
+    </footer>
   </div>
 
-  <!-- Finished lines (yours and Claude's) get added here -->
-  <ol id="transcript"></ol>
+  <!-- Settings. Everything here is stored only in this browser. -->
+  <dialog id="settings" aria-labelledby="settingsTitle">
+    <form id="settingsForm" class="sheet">
+      <div class="sheet-head">
+        <h2 id="settingsTitle" tabindex="-1" autofocus style="outline: none">Settings</h2>
+        <button id="closeSettings" class="icon-btn" type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <section>
+          <h3>Claude</h3>
+          <div class="field">
+            <label for="keyInput">Anthropic API key</label>
+            <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
+          </div>
+          <p class="hint">Saved only in this browser and sent only to api.anthropic.com. Without a key, Pace just transcribes.</p>
+          <div class="field">
+            <label for="effortInput">Effort</label>
+            <select id="effortInput">
+              <option value="low">Low: fastest replies</option>
+              <option value="medium">Medium: balanced</option>
+              <option value="high">High: harder coding</option>
+              <option value="xhigh">Extra high: hardest coding (slow)</option>
+            </select>
+          </div>
+        </section>
+
+        <section>
+          <h3>GitHub repo <span class="opt">· optional</span></h3>
+          <p class="hint">Lets Claude read your repo and commit changes to a work branch (created from the default
+            branch if needed), never straight to your default branch. Use a fine-grained token for just this repo with
+            <b>Contents: Read and write</b>. Sent only to api.github.com.</p>
+          <div class="field">
+            <label for="ghRepoInput">Repository</label>
+            <input id="ghRepoInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="owner/repo">
+          </div>
+          <div class="field">
+            <label for="ghBranchInput">Work branch</label>
+            <input id="ghBranchInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="pace">
+          </div>
+          <div class="field">
+            <label for="ghTokenInput">Token</label>
+            <input id="ghTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
+          </div>
+        </section>
+
+        <section>
+          <h3>Passcode lock <span class="opt">· optional</span></h3>
+          <p class="hint" id="lockHint">Encrypts your saved key and token in this browser. Pace asks for the passcode each time it opens.</p>
+          <div class="field">
+            <label for="passInput" id="passLabel">Passcode</label>
+            <input id="passInput" type="password" autocomplete="new-password" placeholder="Set a passcode">
+          </div>
+          <div class="row" id="lockActions" hidden>
+            <button id="lockNow" class="btn" type="button">Lock now</button>
+            <button id="removeLock" class="btn" type="button">Remove passcode</button>
+          </div>
+        </section>
+
+        <section>
+          <button id="forgetKey" class="btn danger" type="button">Forget keys on this device</button>
+        </section>
+      </div>
+      <div class="sheet-foot">
+        <button id="saveKey" class="btn primary" type="submit">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Passcode lock screen (only when a passcode is set) -->
+  <div id="lock" class="lock" hidden>
+    <form id="lockForm" class="lock-card">
+      <div class="brand"><span class="dot"></span>Pace</div>
+      <p>Enter your passcode to unlock.</p>
+      <div class="field"><input id="lockInput" type="password" autocomplete="current-password" placeholder="Passcode" aria-label="Passcode"></div>
+      <button class="btn primary" type="submit">Unlock</button>
+      <p id="lockError" class="lock-error" role="alert"></p>
+      <button id="lockReset" class="link" type="button">Forgot it? Erase saved keys</button>
+    </form>
+  </div>
 
   <script>
     // =====================================================================
@@ -299,8 +564,9 @@
     // =====================================================================
     const $ = (id) => document.getElementById(id);
     const talkBtn = $('talk'), liveEl = $('live'), transcriptEl = $('transcript');
-    const statusEl = $('status'), modeBtn = $('modeBtn');
+    const statusEl = $('status'), modeBtn = $('modeBtn'), talkLabel = $('talkLabel'), scroller = $('scroller');
     const settingsEl = $('settings'), keyInput = $('keyInput'), effortInput = $('effortInput');
+    const passInput = $('passInput'), lockEl = $('lock');
     const ghRepoInput = $('ghRepoInput'), ghBranchInput = $('ghBranchInput'), ghTokenInput = $('ghTokenInput');
 
     // =====================================================================
@@ -328,6 +594,7 @@
     let mode = store.get('pace-mode') === 'hold' ? 'hold' : 'handsfree';
     let phase = 'idle';
     let conversationOn = false;   // hands-free loop running?
+    // Secrets come from plain storage, or from the encrypted vault after unlocking.
     let apiKey = store.get('pace-api-key') || '';
     let effort = store.get('pace-effort') || 'medium';
     const gh = {
@@ -348,23 +615,28 @@
     // =====================================================================
     function setPhase(p) {
       phase = p;
+      document.body.dataset.phase = p;
       talkBtn.classList.remove('listening', 'thinking', 'speaking');
       if (p !== 'idle') talkBtn.classList.add(p);
+      if (talkBtn.disabled) return;
 
+      let label;
       if (mode === 'hold') {
-        talkBtn.textContent = {
-          idle: 'Hold to talk', listening: 'Listening… release to send',
-          thinking: 'Working… hold to interrupt', speaking: 'Speaking… hold to interrupt',
+        label = {
+          idle: 'Hold to talk', listening: 'Listening · release to send',
+          thinking: 'Working · hold to interrupt', speaking: 'Speaking · hold to interrupt',
         }[p];
-        liveEl.dataset.placeholder = 'Hold the button and speak…';
+        liveEl.dataset.placeholder = p === 'idle' ? 'Hold the mic and speak' : '';
       } else {
-        talkBtn.textContent = {
-          idle: 'Start conversation', listening: 'Listening… tap to stop',
-          thinking: 'Working… tap to stop', speaking: 'Speaking… tap to interrupt',
+        label = {
+          idle: 'Tap to start', listening: 'Listening · tap to stop',
+          thinking: 'Working · tap to stop', speaking: 'Speaking · tap to interrupt',
         }[p];
-        liveEl.dataset.placeholder = conversationOn ? 'Go ahead, I’m listening…' : 'Tap the button to start talking…';
+        liveEl.dataset.placeholder = p === 'listening' ? 'Go ahead, I’m listening…' : '';
       }
-      modeBtn.textContent = mode === 'hold' ? '✋ Hold to talk' : '🔁 Hands-free';
+      talkLabel.textContent = label;
+      talkBtn.setAttribute('aria-label', label);
+      modeBtn.textContent = mode === 'hold' ? 'Hold to talk' : 'Hands-free';
     }
 
     // While Claude works, the button shows "speaking" if audio is queued,
@@ -412,7 +684,7 @@
 
     function makeLine(role) {
       const li = document.createElement('li');
-      li.className = role === 'note' ? 'info' : role;
+      li.className = role;
       const body = document.createElement('div');
       body.className = 'body';
       li.appendChild(body);
@@ -421,13 +693,7 @@
     }
 
     function renderBody(body, role, text) {
-      body.textContent = '';
-      if (LABELS[role]) {
-        const who = document.createElement('span');
-        who.className = 'who';
-        who.textContent = LABELS[role];
-        body.appendChild(who);
-      }
+      body.textContent = '';   // bubbles show who's talking; labels are only for "Copy"
       splitCode(text).forEach((part) => {
         if (part.code !== undefined) {
           const pre = document.createElement('pre');
@@ -439,7 +705,7 @@
       });
     }
 
-    function scrollToEnd() { transcriptEl.scrollTop = transcriptEl.scrollHeight; }
+    function scrollToEnd() { scroller.scrollTop = scroller.scrollHeight; }
 
     function addLine(role, text, url) {
       lines.push(LABELS[role] ? LABELS[role] + ' ' + text : text + (url ? ' ' + url : ''));
@@ -448,7 +714,7 @@
       if (url) {
         const a = document.createElement('a');
         a.href = url; a.target = '_blank'; a.rel = 'noopener';
-        a.textContent = url; a.style.color = 'inherit';
+        a.textContent = url.replace(/^https:\/\//, '');
         body.appendChild(a);
       }
       scrollToEnd();
@@ -547,6 +813,17 @@
         synth.speak(u);
       });
       updatePhase();
+    }
+
+    // iPhone (and some browsers) only allow speech that starts from a tap.
+    // Speaking a silent utterance during the first tap unlocks it for later replies.
+    let speechPrimed = false;
+    function primeSpeech() {
+      if (speechPrimed || !synth) return;
+      speechPrimed = true;
+      const u = new SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      synth.speak(u);
     }
 
     function stopSpeaking() {
@@ -1034,10 +1311,10 @@
 
     if (!SpeechRecognition) {
       talkBtn.disabled = true;
-      talkBtn.textContent = 'Not supported';
+      talkLabel.textContent = 'Voice input not supported here';
       showStatus(
-        'Sorry — this browser does not support speech recognition. ' +
-        'Please open this page in Google Chrome (desktop or Android).',
+        'Sorry, this browser does not support speech recognition. ' +
+        'Use Chrome on a computer or Android, or Safari on iPhone.',
         true
       );
     } else {
@@ -1167,6 +1444,7 @@
     talkBtn.addEventListener('pointerdown', (e) => {
       if (!recognition) return;
       e.preventDefault();
+      primeSpeech();
       if (mode === 'hold') {
         if (e.pointerId !== undefined) { try { talkBtn.setPointerCapture(e.pointerId); } catch {} }
         holdStart();
@@ -1202,41 +1480,112 @@
       setPhase('idle');
     });
 
-    // ---- Settings ----
-    $('settingsBtn').addEventListener('click', () => {
-      settingsEl.classList.toggle('open');
-      if (settingsEl.classList.contains('open')) {
-        keyInput.value = apiKey;
-        effortInput.value = effort;
-        ghRepoInput.value = gh.repo;
-        ghBranchInput.value = gh.branch === DEFAULT_BRANCH ? '' : gh.branch;
-        ghTokenInput.value = gh.token;
-        keyInput.focus();
-      }
-    });
+    // =====================================================================
+    // Passcode vault: with a passcode set, the API key and GitHub token are
+    // stored encrypted (AES-GCM, key derived from the passcode with PBKDF2)
+    // and only decrypted in memory after unlocking.
+    // =====================================================================
+    const VAULT = 'pace-vault';
+    let vaultKey = null, vaultSalt = null;   // set while a passcode is in use
+
+    const b64e = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+    const b64d = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+    async function deriveKey(passcode, salt) {
+      const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(passcode), 'PBKDF2', false, ['deriveKey']);
+      return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' },
+        base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+      );
+    }
 
     const saveOrDelete = (k, v) => { if (v) store.set(k, v); else store.del(k); };
 
-    $('saveKey').addEventListener('click', () => {
-      apiKey = keyInput.value.trim();
-      effort = effortInput.value;
+    // Write the secrets, encrypted if a passcode is set, plain otherwise.
+    async function saveSecrets() {
+      if (vaultKey) {
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const plain = new TextEncoder().encode(JSON.stringify({ apiKey, ghToken: gh.token }));
+        const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, vaultKey, plain);
+        store.set(VAULT, JSON.stringify({ v: 1, salt: b64e(vaultSalt), iv: b64e(iv), data: b64e(data) }));
+        store.del('pace-api-key');
+        store.del('pace-gh-token');
+      } else {
+        store.del(VAULT);
+        saveOrDelete('pace-api-key', apiKey);
+        saveOrDelete('pace-gh-token', gh.token);
+      }
+    }
+
+    // Throws if the passcode is wrong.
+    async function unlockVault(passcode) {
+      const v = JSON.parse(store.get(VAULT));
+      const salt = b64d(v.salt);
+      const key = await deriveKey(passcode, salt);
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(v.iv) }, key, b64d(v.data));
+      const s = JSON.parse(new TextDecoder().decode(plain));
+      vaultKey = key;
+      vaultSalt = salt;
+      apiKey = s.apiKey || '';
+      gh.token = s.ghToken || '';
+    }
+
+    function refreshLockUI() {
+      const locked = !!vaultKey;
+      $('lockActions').hidden = !locked;
+      $('passLabel').textContent = locked ? 'Change passcode' : 'Passcode';
+      passInput.placeholder = locked ? 'Leave blank to keep the current one' : 'Set a passcode';
+    }
+
+    // ---- Settings ----
+    function openSettings() {
+      keyInput.value = apiKey;
+      effortInput.value = effort;
+      ghRepoInput.value = gh.repo;
+      ghBranchInput.value = gh.branch === DEFAULT_BRANCH ? '' : gh.branch;
+      ghTokenInput.value = gh.token;
+      passInput.value = '';
+      refreshLockUI();
+      settingsEl.showModal();
+    }
+    $('settingsBtn').addEventListener('click', openSettings);
+    $('closeSettings').addEventListener('click', () => settingsEl.close());
+    // Tap outside the sheet to close it.
+    settingsEl.addEventListener('click', (e) => { if (e.target === settingsEl) settingsEl.close(); });
+
+    $('settingsForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
       const repo = ghRepoInput.value.trim()
         .replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '');
       if (repo && !/^[\w.-]+\/[\w.-]+$/.test(repo)) {
         showStatus('The repo should look like owner/name, for example liujerry7/Pace.', true);
+        settingsEl.close();
         return;
       }
+      const pass = passInput.value;
+      if (pass && pass.length < 4) {
+        passInput.setCustomValidity('Use at least 4 characters.');
+        passInput.reportValidity();
+        passInput.setCustomValidity('');
+        return;
+      }
+
+      apiKey = keyInput.value.trim();
+      effort = effortInput.value;
       const before = gh.repo + '|' + gh.branch + '|' + codingOn();
       gh.repo = repo;
       gh.branch = ghBranchInput.value.trim() || DEFAULT_BRANCH;
       gh.token = ghTokenInput.value.trim();
 
-      saveOrDelete('pace-api-key', apiKey);
       store.set('pace-effort', effort);
       saveOrDelete('pace-gh-repo', gh.repo);
       saveOrDelete('pace-gh-branch', gh.branch === DEFAULT_BRANCH ? '' : gh.branch);
-      saveOrDelete('pace-gh-token', gh.token);
-      settingsEl.classList.remove('open');
+      if (pass) {
+        vaultSalt = crypto.getRandomValues(new Uint8Array(16));
+        vaultKey = await deriveKey(pass, vaultSalt);
+      }
+      await saveSecrets();
+      settingsEl.close();
 
       // Switching repos (or turning coding on/off) starts a fresh conversation.
       if (before !== gh.repo + '|' + gh.branch + '|' + codingOn()) {
@@ -1244,17 +1593,31 @@
         branchState = null;
         if (codingOn()) addLine('info', 'Connected to ' + gh.repo + '. Changes go to branch ' + gh.branch + '.');
       }
-      showStatus(!apiKey ? 'Saved. No API key, so Pace will only transcribe.' :
-        codingOn() ? 'Saved. Claude can now code in ' + gh.repo + '.' : 'Saved.');
+      showStatus(
+        (!apiKey ? 'Saved. No API key, so Pace will only transcribe.' :
+          codingOn() ? 'Saved. Claude can now code in ' + gh.repo + '.' : 'Saved.') +
+        (pass ? ' Passcode lock is on.' : '')
+      );
+    });
+
+    $('lockNow').addEventListener('click', () => location.reload());
+
+    $('removeLock').addEventListener('click', async () => {
+      vaultKey = null; vaultSalt = null;
+      await saveSecrets();
+      refreshLockUI();
+      showStatus('Passcode removed. Your keys are saved unencrypted in this browser.');
     });
 
     $('forgetKey').addEventListener('click', () => {
       apiKey = ''; gh.token = '';
-      keyInput.value = ''; ghTokenInput.value = '';
+      vaultKey = null; vaultSalt = null;
+      store.del(VAULT);
       store.del('pace-api-key');
       store.del('pace-gh-token');
+      settingsEl.close();
       clearConversation();
-      showStatus('API key and GitHub token removed from this browser.');
+      showStatus('API key, GitHub token and passcode removed from this browser.');
     });
 
     // ---- Clear and Copy all ----
@@ -1287,10 +1650,46 @@
       showStatus('Copied ' + lines.length + ' line(s) to the clipboard.');
     });
 
-    // First paint
+    // =====================================================================
+    // Start up: ask for the passcode first if the keys are locked.
+    // =====================================================================
+    function ready() {
+      lockEl.hidden = true;
+      setPhase('idle');
+      if (!apiKey && recognition) showStatus('Tip: tap ⚙️ Settings and paste your Anthropic key so Claude can talk back.');
+      else if (codingOn()) showStatus('Coding in ' + gh.repo + ' (branch ' + gh.branch + ').');
+    }
+
     setPhase('idle');
-    if (!apiKey && recognition) showStatus('Tip: tap ⚙️ Settings and paste your Anthropic key so Claude can talk back.');
-    else if (codingOn()) showStatus('Coding in ' + gh.repo + ' (branch ' + gh.branch + ').');
+    if (store.get(VAULT)) {
+      lockEl.hidden = false;
+      const lockInput = $('lockInput'), lockError = $('lockError'), lockReset = $('lockReset');
+      lockInput.focus();
+      $('lockForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        lockError.textContent = 'Unlocking…';
+        try {
+          await unlockVault(lockInput.value);
+          lockInput.value = '';
+          lockError.textContent = '';
+          ready();
+        } catch {
+          lockError.textContent = 'That passcode didn’t work.';
+          lockInput.select();
+        }
+      });
+      // Two taps to erase, so it can't happen by accident.
+      let armed = false;
+      lockReset.addEventListener('click', () => {
+        if (!armed) { armed = true; lockReset.textContent = 'Tap again to erase your saved key and token'; return; }
+        store.del(VAULT);
+        apiKey = ''; gh.token = '';
+        ready();
+        showStatus('Saved keys erased. Add them again in ⚙️ Settings.');
+      });
+    } else {
+      ready();
+    }
   </script>
 </body>
 </html>

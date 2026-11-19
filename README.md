@@ -12,6 +12,19 @@ Code in replies is shown on screen but not read aloud. **Clear** also starts a f
 
 **Effort** (in Settings) trades speed for depth: Medium is the default; use High or Extra high for heavier coding.
 
+## Install it like an app
+- **iPhone:** open the site in Safari → Share → **Add to Home Screen**. It gets the Pace icon and opens full screen.
+- **Android / desktop Chrome:** menu → **Install app** (or "Add to Home screen").
+
+Each install keeps its own saved keys, so paste your key once more inside the installed app.
+
+## Keeping it yours
+The page itself is public (GitHub Pages can't password-protect a site on a personal account), but it's useless to anyone else: your API key and GitHub token live only in your own browser, so visitors would have to bring their own. It's also marked `noindex` so search engines skip it.
+
+For your own devices, set a **passcode** in Settings. Your key and token are then stored encrypted, and Pace asks for the passcode each time it opens (**Lock now** locks it right away).
+
+To hide the page from everyone else entirely, host it on Cloudflare Pages behind **Cloudflare Access** (free for personal use), which asks for a one-time code sent to your email before the page loads at all.
+
 ## Coding in a GitHub repo
 In **⚙️ Settings → Code in a GitHub repo**, fill in:
 
