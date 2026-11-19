@@ -915,8 +915,8 @@
           case 'message_delta':
             if (msg) Object.assign(msg, ev.delta);
             break;
-          case 'error':
-            throw new Error('Claude API error: ' + ((ev.error && ev.error.message) || 'stream failed'));
+          case 'error':   // e.g. overloaded partway through a reply
+            throw apiError(0, ev);
         }
       };
 
@@ -1039,8 +1039,11 @@
           if (!ctrl.cleared) addLine('info', 'Interrupted.');
         } else {
           if (!answered) rollbackHistory(mark);
-          showStatus(err.message || String(err), true);
-          if (err.fatal) stopConversation();
+          const e = friendlyError(err);
+          showStatus(e.message, true);
+          if (e.link) addLine('info', e.linkText, e.link);
+          if (e.fatal) stopConversation();   // don't keep listening into a wall
+          if (e.spoken) say(e.spoken);       // you may not be looking at the screen
         }
       } finally {
         endSegment();
@@ -1057,16 +1060,54 @@
       }
     }
 
+    // Turn an API error response (or a mid-stream error event) into a clear
+    // message. fatal = stop hands-free mode; spoken = said out loud.
     function apiError(status, data) {
+      const type = (data && data.error && data.error.type) || '';
       const msg = (data && data.error && data.error.message) || ('HTTP ' + status);
-      const err = new Error(
-        status === 401 ? 'Your API key was rejected. Tap ⚙️ Settings and check it.' :
-        status === 429 ? 'Rate limited by the API. Wait a moment and try again.' :
-        status === 529 ? 'The API is overloaded right now. Try again shortly.' :
-        'Claude API error: ' + msg
-      );
-      err.fatal = status === 401 || status === 403;
+      const err = new Error('Claude API error: ' + msg);
+
+      if (status === 402 || type === 'billing_error' ||
+          /credit balance|billing|purchase credits|spend(ing)? limit|usage limit/i.test(msg)) {
+        err.message = 'Out of API credit, or you hit your spending limit. Add credits (or raise the limit) in the Anthropic Console, then try again.';
+        err.spoken = 'I’m out of API credit, so I’ve stopped. Add credits in the Anthropic console.';
+        err.link = 'https://console.anthropic.com/settings/billing';
+        err.linkText = 'Billing:';
+        err.fatal = true;
+      } else if (status === 401 || type === 'authentication_error') {
+        err.message = 'Your API key was rejected. Tap ⚙️ Settings and check it.';
+        err.spoken = 'My API key was rejected. Check it in settings.';
+        err.fatal = true;
+      } else if (status === 403 || type === 'permission_error') {
+        err.message = 'Your API key isn’t allowed to do this: ' + msg;
+        err.spoken = 'My API key isn’t allowed to do that.';
+        err.fatal = true;
+      } else if (status === 429 || type === 'rate_limit_error') {
+        err.message = 'Rate limited by the API. Wait a minute and try again.';
+        err.spoken = 'I’m being rate limited. Give it a minute.';
+      } else if (status === 529 || type === 'overloaded_error') {
+        err.message = 'Claude is overloaded right now. Try again in a moment.';
+        err.spoken = 'Claude is overloaded right now. Try again in a moment.';
+      } else if (status >= 500 || type === 'api_error') {
+        err.message = 'Claude’s servers had a problem. Try again.';
+        err.spoken = 'Something went wrong on Claude’s side. Try again.';
+      } else if (/prompt is too long|context window|too many tokens/i.test(msg)) {
+        err.message = 'This conversation got too long for Claude. Tap ✎ (new conversation) to start fresh.';
+        err.spoken = 'This conversation got too long. Start a new one.';
+        err.fatal = true;
+      }
       return err;
+    }
+
+    // Any failure during a turn -> something a person can act on.
+    function friendlyError(err) {
+      if (err && err.spoken !== undefined) return err;   // already from apiError
+      const msg = (err && err.message) || String(err);
+      if (err && err.name === 'TypeError' && /fetch|network|load failed|connection/i.test(msg)) {
+        return { message: 'Couldn’t reach Claude. Check your internet connection and try again.',
+                 spoken: 'I can’t reach the internet right now.' };
+      }
+      return { message: msg };
     }
 
     // =====================================================================
