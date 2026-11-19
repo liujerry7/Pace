@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#000000">
-  <title>Voice Code</title>
+  <title>Pace Voice Code</title>
   <style>
     /* ---------- Theme: dark, high contrast, big text (readable on a TV) ---------- */
     :root {
@@ -13,16 +13,17 @@
       --border: #3a3a3a;
       --text: #ffffff;
       --muted: #b0b0b0;
-      --accent: #ffd400;      /* bright yellow: idle button */
-      --live: #ff3b3b;        /* red: currently listening */
-      --ok: #3ddc84;
+      --accent: #ffd400;      /* yellow: ready */
+      --live: #ff3b3b;        /* red: listening */
+      --think: #4da3ff;       /* blue: Claude is thinking */
+      --speak: #3ddc84;       /* green: Claude is speaking */
     }
 
     * { box-sizing: border-box; }
 
     html, body {
       margin: 0;
-      height: 100%;
+      min-height: 100%;
       background: var(--bg);
       color: var(--text);
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -35,14 +36,58 @@
       padding: 16px;
       max-width: 1400px;
       margin: 0 auto;
+      height: 100dvh;
     }
 
-    h1 {
-      margin: 0;
-      font-size: clamp(1.5rem, 3vw, 2.5rem);
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    h1 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.5rem); }
+
+    button { font: inherit; cursor: pointer; }
+
+    /* Small outlined buttons (settings, mode, copy, clear) */
+    .btn {
+      font-size: clamp(1.1rem, 2.2vw, 1.6rem);
+      font-weight: 700;
+      padding: 12px 18px;
+      background: var(--panel);
+      color: var(--text);
+      border: 2px solid var(--text);
+      border-radius: 14px;
+    }
+    .btn:active { background: #333; }
+    .btn[aria-pressed="true"] { background: var(--text); color: #000; }
+
+    /* ---------- Settings panel (API key) ---------- */
+    #settings {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px;
+      background: var(--panel);
+      border: 2px solid var(--accent);
+      border-radius: 16px;
+      font-size: clamp(1rem, 2vw, 1.4rem);
+    }
+    #settings.open { display: flex; }
+    #settings p { margin: 0; color: var(--muted); }
+    #settings .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    #keyInput {
+      flex: 1 1 260px;
+      font-size: 1.2em;
+      padding: 12px;
+      background: #000;
+      color: var(--text);
+      border: 2px solid var(--border);
+      border-radius: 10px;
     }
 
-    /* Message shown when speech recognition is unavailable or fails */
+    /* Status / error line */
     #status {
       font-size: clamp(1.1rem, 2.2vw, 1.6rem);
       color: var(--muted);
@@ -56,35 +101,28 @@
       font-weight: 700;
     }
 
-    /* ---------- The big Hold-to-talk button ---------- */
+    /* ---------- The big talk button ---------- */
     #talk {
       width: 100%;
-      min-height: 160px;
+      min-height: 150px;
       font-size: clamp(2rem, 6vw, 4rem);
       font-weight: 800;
       color: #000;
       background: var(--accent);
       border: none;
       border-radius: 24px;
-      cursor: pointer;
       /* Stop phones from selecting text / showing menus on long press */
       user-select: none;
       -webkit-user-select: none;
       -webkit-touch-callout: none;
       touch-action: none;
     }
-    #talk.listening {
-      background: var(--live);
-      color: #fff;
-      box-shadow: 0 0 0 8px rgba(255, 59, 59, 0.35);
-    }
-    #talk:disabled {
-      background: #444;
-      color: #888;
-      cursor: not-allowed;
-    }
+    #talk.listening { background: var(--live); color: #fff; box-shadow: 0 0 0 8px rgba(255,59,59,.35); }
+    #talk.thinking  { background: var(--think); }
+    #talk.speaking  { background: var(--speak); }
+    #talk:disabled  { background: #444; color: #888; cursor: not-allowed; }
 
-    /* ---------- Live (interim) text while speaking ---------- */
+    /* ---------- Live text: what's being heard right now ---------- */
     #live {
       min-height: 2.6em;
       padding: 16px 20px;
@@ -96,32 +134,12 @@
       font-weight: 600;
       word-wrap: break-word;
     }
-    #live:empty::before {
-      content: "Hold the button and speak…";
-      color: var(--muted);
-      font-weight: 400;
-    }
+    #live:empty::before { content: attr(data-placeholder); color: var(--muted); font-weight: 400; }
 
-    /* ---------- Toolbar ---------- */
-    .toolbar {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-    .toolbar button {
-      flex: 1 1 160px;
-      font-size: clamp(1.2rem, 2.5vw, 1.8rem);
-      font-weight: 700;
-      padding: 14px 20px;
-      background: var(--panel);
-      color: var(--text);
-      border: 2px solid var(--text);
-      border-radius: 14px;
-      cursor: pointer;
-    }
-    .toolbar button:active { background: #333; }
+    .toolbar { display: flex; gap: 12px; flex-wrap: wrap; }
+    .toolbar .btn { flex: 1 1 140px; }
 
-    /* ---------- Transcript: numbered lines, newest at the bottom ---------- */
+    /* ---------- Conversation: numbered lines, newest at the bottom ---------- */
     #transcript {
       flex: 1 1 auto;
       min-height: 200px;
@@ -133,7 +151,6 @@
       background: var(--panel);
       border: 2px solid var(--border);
       border-radius: 16px;
-      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
       font-size: clamp(1.3rem, 3vw, 2.2rem);
       line-height: 1.4;
     }
@@ -141,9 +158,8 @@
       counter-increment: line;
       display: flex;
       gap: 16px;
-      padding: 6px 0;
+      padding: 8px 0;
       border-bottom: 1px solid #222;
-      word-break: break-word;
     }
     #transcript li::before {
       content: counter(line);
@@ -152,82 +168,338 @@
       color: var(--accent);
       font-weight: 700;
     }
-    #transcript li.newest { color: var(--ok); }
+    #transcript .body { flex: 1; min-width: 0; word-break: break-word; }
+    #transcript .who  { font-weight: 800; margin-right: .4em; }
+    #transcript li.user .who      { color: var(--accent); }
+    #transcript li.assistant .who { color: var(--speak); }
+    #transcript li.info           { color: var(--muted); font-style: italic; }
+    #transcript pre {
+      margin: 8px 0 0;
+      padding: 12px 16px;
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow-x: auto;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: .9em;
+      color: #e6e6e6;
+      white-space: pre;
+    }
   </style>
 </head>
 <body>
-  <h1>🎙️ Voice Code</h1>
+  <header>
+    <h1>🎙️ Pace</h1>
+    <div class="toolbar">
+      <button id="modeBtn" class="btn" type="button">🔁 Hands-free</button>
+      <button id="settingsBtn" class="btn" type="button">⚙️ API key</button>
+    </div>
+  </header>
+
+  <!-- API key settings. The key is only stored in this browser (localStorage). -->
+  <section id="settings" aria-label="Settings">
+    <p>Paste your Anthropic API key to talk with Claude. It is saved only in this browser
+       and sent only to api.anthropic.com. Without a key, Pace just transcribes.</p>
+    <div class="row">
+      <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
+      <button id="saveKey" class="btn" type="button">Save</button>
+      <button id="forgetKey" class="btn" type="button">Forget key</button>
+    </div>
+  </section>
+
   <div id="status" role="status" aria-live="polite"></div>
 
-  <button id="talk" type="button">Hold to talk</button>
+  <button id="talk" type="button">Start conversation</button>
 
   <!-- What is being heard right now -->
-  <div id="live" aria-live="polite"></div>
+  <div id="live" aria-live="polite" data-placeholder=""></div>
 
   <div class="toolbar">
-    <button id="copy" type="button">Copy all</button>
-    <button id="clear" type="button">Clear</button>
+    <button id="copy" class="btn" type="button">Copy all</button>
+    <button id="clear" class="btn" type="button">Clear</button>
   </div>
 
-  <!-- Finished lines get added here -->
+  <!-- Finished lines (yours and Claude's) get added here -->
   <ol id="transcript"></ol>
 
   <script>
     // =====================================================================
+    // Settings you might want to tweak
+    // =====================================================================
+    const MODEL = 'claude-opus-5-5';
+    const SYSTEM_PROMPT =
+      'You are Pace, a hands-free voice coding assistant. The user talks to you out loud; ' +
+      'their words come from speech recognition, so expect misheard words and missing ' +
+      'punctuation, and infer what they meant. Your reply is read aloud by text-to-speech, ' +
+      'so keep the spoken part short and conversational: usually one to three sentences, ' +
+      'plain text, no markdown, no lists. When the user dictates code or asks for code ' +
+      '(for example "for i from zero to max length"), turn it into real code and put it in ' +
+      'a single fenced code block. Code blocks are shown on screen and are NOT read aloud, ' +
+      'so in the spoken part just say briefly what you wrote. Use JavaScript unless the ' +
+      'user names another language. If something is ambiguous, ask one short question.';
+
+    // Saying one of these (on its own) ends a hands-free conversation.
+    const STOP_PHRASES = /^(stop|stop listening|end conversation|goodbye|good bye|bye)[.!]?$/i;
+
+    // =====================================================================
     // Element references
     // =====================================================================
-    const talkBtn      = document.getElementById('talk');
-    const liveEl       = document.getElementById('live');
-    const transcriptEl = document.getElementById('transcript');
-    const statusEl     = document.getElementById('status');
-    const copyBtn      = document.getElementById('copy');
-    const clearBtn     = document.getElementById('clear');
-
-    // All finished lines, in order. Index 0 is line 1.
-    const lines = [];
+    const $ = (id) => document.getElementById(id);
+    const talkBtn = $('talk'), liveEl = $('live'), transcriptEl = $('transcript');
+    const statusEl = $('status'), modeBtn = $('modeBtn');
+    const settingsEl = $('settings'), keyInput = $('keyInput');
 
     // =====================================================================
-    // TRANSCRIPT HANDLING — the one place every finished phrase goes.
-    //
-    // Later this is where we'll send `text` to an AI that turns phrases
-    // like "for i from zero to max length" into real code. To extend it,
-    // change what happens between "1." and "2." below (e.g. await a fetch
-    // and display the converted code alongside the spoken text).
+    // Small helpers: safe localStorage, status messages
     // =====================================================================
-    function addTranscriptLine(text) {
-      text = text.trim();
-      if (!text) return;
+    const store = {
+      get(k)    { try { return localStorage.getItem(k); } catch { return null; } },
+      set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+      del(k)    { try { localStorage.removeItem(k); } catch {} },
+    };
 
-      // 1. Store the line.
-      lines.push(text);
-
-      // (Future: convert `text` to code here.)
-
-      // 2. Show it as a new numbered line at the bottom.
-      const prev = transcriptEl.querySelector('li.newest');
-      if (prev) prev.classList.remove('newest');
-
-      const li = document.createElement('li');
-      li.textContent = text;
-      li.classList.add('newest');
-      transcriptEl.appendChild(li);
-
-      // 3. Keep the newest line in view.
-      li.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }
-
-    // =====================================================================
-    // Status / error messages
-    // =====================================================================
     function showStatus(message, isError = false) {
       statusEl.textContent = message;
       statusEl.classList.toggle('error', isError);
     }
 
     // =====================================================================
-    // Speech recognition setup
+    // App state
+    //
+    //   mode:  'handsfree' -> tap once; Pace listens, Claude replies out loud,
+    //                         then Pace listens again automatically.
+    //          'hold'      -> hold the button to talk, like a walkie-talkie.
+    //   phase: 'idle' | 'listening' | 'thinking' | 'speaking'
+    // =====================================================================
+    let mode = store.get('pace-mode') === 'hold' ? 'hold' : 'handsfree';
+    let phase = 'idle';
+    let conversationOn = false;   // hands-free loop running?
+    let apiKey = store.get('pace-api-key') || '';
+
+    const lines = [];     // plain-text log for "Copy all"
+    const history = [];   // messages sent to Claude (the conversation so far)
+
+    // =====================================================================
+    // Update the big button so its label always says what a tap/hold will do.
+    // =====================================================================
+    function setPhase(p) {
+      phase = p;
+      talkBtn.classList.remove('listening', 'thinking', 'speaking');
+      if (p !== 'idle') talkBtn.classList.add(p);
+
+      if (mode === 'hold') {
+        talkBtn.textContent = {
+          idle: 'Hold to talk', listening: 'Listening… release to send',
+          thinking: 'Thinking…', speaking: 'Speaking… hold to interrupt',
+        }[p];
+        liveEl.dataset.placeholder = 'Hold the button and speak…';
+      } else {
+        talkBtn.textContent = {
+          idle: 'Start conversation', listening: 'Listening… tap to stop',
+          thinking: 'Thinking… tap to stop', speaking: 'Speaking… tap to interrupt',
+        }[p];
+        liveEl.dataset.placeholder = conversationOn ? 'Go ahead, I’m listening…' : 'Tap the button to start talking…';
+      }
+      modeBtn.textContent = mode === 'hold' ? '✋ Hold to talk' : '🔁 Hands-free';
+    }
+
+    // =====================================================================
+    // TRANSCRIPT HANDLING — the one place every finished phrase goes.
+    // Adds your line to the log, then (if a key is saved) asks Claude.
+    // =====================================================================
+    function addTranscriptLine(text) {
+      text = text.trim();
+      if (!text) return false;
+
+      // Voice command to end a hands-free conversation.
+      if (conversationOn && STOP_PHRASES.test(text)) {
+        stopConversation();
+        addLine('info', 'Conversation ended.');
+        return false;
+      }
+
+      addLine('user', text);
+
+      if (!apiKey) {
+        if (lines.length === 1) showStatus('No API key saved: transcribing only. Tap ⚙️ API key to talk with Claude.');
+        return false;
+      }
+      askClaude(text);
+      return true;
+    }
+
+    // Draw one numbered line. Code blocks (```...```) become <pre> boxes.
+    // Everything uses textContent, so nothing from the model can inject HTML.
+    function addLine(role, text) {
+      const label = { user: 'You:', assistant: 'Claude:', info: '' }[role];
+      lines.push(label ? label + ' ' + text : text);
+
+      const li = document.createElement('li');
+      li.className = role;
+      const body = document.createElement('div');
+      body.className = 'body';
+      if (label) {
+        const who = document.createElement('span');
+        who.className = 'who';
+        who.textContent = label;
+        body.appendChild(who);
+      }
+      splitCode(text).forEach((part) => {
+        if (part.code !== undefined) {
+          const pre = document.createElement('pre');
+          pre.textContent = part.code;
+          body.appendChild(pre);
+        } else if (part.text.trim()) {
+          body.appendChild(document.createTextNode(part.text.trim() + ' '));
+        }
+      });
+      li.appendChild(body);
+      transcriptEl.appendChild(li);
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;  // keep the newest line in view
+    }
+
+    // "Hi ```js\ncode\n``` bye" -> [{text:'Hi '}, {code:'code'}, {text:' bye'}]
+    function splitCode(text) {
+      const parts = [];
+      const re = /```[^\n`]*\n?([\s\S]*?)```/g;
+      let last = 0, m;
+      while ((m = re.exec(text))) {
+        parts.push({ text: text.slice(last, m.index) });
+        parts.push({ code: m[1].replace(/\n$/, '') });
+        last = re.lastIndex;
+      }
+      parts.push({ text: text.slice(last) });
+      return parts;
+    }
+
+    // =====================================================================
+    // Talking to Claude (Anthropic Messages API, called straight from the browser)
+    // =====================================================================
+    async function askClaude(text) {
+      setPhase('thinking');
+      showStatus('');
+      history.push({ role: 'user', content: text });
+
+      let data;
+      try {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2026-10-21',
+            // Required for calling the API directly from a web page.
+            'anthropic-dangerous-direct-browser-access': 'true',
+            // Lets the API retry on another model if this one declines a request.
+            'anthropic-beta': 'server-side-fallback-2026-07-01',
+          },
+          body: JSON.stringify({
+            model: MODEL,
+            max_tokens: 16000,
+            system: SYSTEM_PROMPT,
+            output_config: { effort: 'low' },  // quick replies for conversation
+            fallbacks: 'default',
+            messages: history,
+          }),
+        });
+        data = await res.json().catch(() => ({}));
+        if (!res.ok) throw apiError(res.status, data);
+      } catch (err) {
+        history.pop();   // forget the unanswered turn so history stays valid
+        showStatus(err.message || String(err), true);
+        if (err.fatal) stopConversation();
+        afterTurn();
+        return;
+      }
+
+      // Safety decline: drop the turn and keep going.
+      if (data.stop_reason === 'refusal') {
+        history.pop();
+        addLine('info', 'Claude declined to answer that one.');
+        afterTurn();
+        return;
+      }
+
+      // Keep the full reply (including any hidden thinking blocks) in history,
+      // exactly as received — the API expects it back unchanged.
+      history.push({ role: 'assistant', content: data.content });
+
+      const reply = (data.content || [])
+        .filter((b) => b.type === 'text')
+        .map((b) => b.text)
+        .join('\n')
+        .trim() || '(no reply)';
+
+      addLine('assistant', reply);
+      speak(reply);
+    }
+
+    function apiError(status, data) {
+      const msg = (data && data.error && data.error.message) || ('HTTP ' + status);
+      const err = new Error(
+        status === 401 ? 'Your API key was rejected. Tap ⚙️ API key and check it.' :
+        status === 429 ? 'Rate limited by the API. Wait a moment and try again.' :
+        status === 529 ? 'The API is overloaded right now. Try again shortly.' :
+        'Claude API error: ' + msg
+      );
+      err.fatal = status === 401 || status === 403;
+      return err;
+    }
+
+    // =====================================================================
+    // Speaking replies out loud (browser's built-in text-to-speech)
+    // =====================================================================
+    const synth = window.speechSynthesis;
+
+    function speak(text) {
+      // Code blocks are on screen; don't read them out.
+      const spoken = splitCode(text)
+        .map((p) => (p.code !== undefined ? ' ' : p.text))
+        .join(' ')
+        .replace(/[*_#`>]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!synth || !spoken) { afterTurn(); return; }
+
+      setPhase('speaking');
+      synth.cancel();
+      // Chrome can cut off long utterances, so speak sentence by sentence.
+      const chunks = spoken.match(/[^.!?]+[.!?]*/g) || [spoken];
+      chunks.forEach((chunk, i) => {
+        const u = new SpeechSynthesisUtterance(chunk.trim());
+        u.lang = 'en-US';
+        if (i === chunks.length - 1) {
+          u.onend = () => { if (phase === 'speaking') afterTurn(); };
+          u.onerror = () => { if (phase === 'speaking') afterTurn(); };
+        }
+        synth.speak(u);
+      });
+    }
+
+    function stopSpeaking() {
+      if (synth) synth.cancel();
+    }
+
+    // What happens when a turn is over: in hands-free, listen again.
+    function afterTurn() {
+      if (mode === 'handsfree' && conversationOn) {
+        startListening();
+      } else {
+        setPhase('idle');
+      }
+    }
+
+    // =====================================================================
+    // Speech recognition
     // =====================================================================
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let recRunning = false;
+    let holding = false;     // hold mode: button currently held?
+    let savedText = '';      // hold mode: text from earlier segments of this hold
+    let sessionText = '';    // best text from the current recognizer segment
+    let hadFinal = false;
 
     if (!SpeechRecognition) {
       talkBtn.disabled = true;
@@ -238,71 +510,16 @@
         true
       );
     } else {
-      setupRecognition();
-    }
-
-    function setupRecognition() {
-      const recognition = new SpeechRecognition();
+      recognition = new SpeechRecognition();
       recognition.lang = 'en-US';
-      recognition.interimResults = true;  // show words as they are heard
-      recognition.continuous = true;      // keep listening while the button is held
+      recognition.interimResults = true;   // show words as they are heard
 
-      let holding = false;   // is the button currently held down?
-      let running = false;   // is the recognizer currently active?
-      let savedText = '';    // text from earlier segments of this same hold
-      let sessionText = '';  // best text from the current recognizer segment
-
-      // Start listening (called when the button is pressed)
-      function start() {
-        if (holding) return;
-        holding = true;
-        savedText = '';
-        sessionText = '';
-        liveEl.textContent = '';
-        talkBtn.classList.add('listening');
-        talkBtn.textContent = 'Listening… release to finish';
-        showStatus('');
-        startRecognizer();
-      }
-
-      // Stop listening (called when the button is released)
-      function stop() {
-        if (!holding) return;
-        holding = false;
-        talkBtn.classList.remove('listening');
-        talkBtn.textContent = 'Hold to talk';
-        if (running) {
-          recognition.stop();   // 'end' event will finish the line
-        } else {
-          finishLine();
-        }
-      }
-
-      function startRecognizer() {
-        try {
-          recognition.start();
-          running = true;
-        } catch (err) {
-          // start() throws if it's already running; safe to ignore.
-        }
-      }
-
-      // Send everything heard during this hold to the transcript.
-      function finishLine() {
-        const text = (savedText + ' ' + sessionText).trim();
-        savedText = '';
-        sessionText = '';
-        liveEl.textContent = '';
-        addTranscriptLine(text);
-      }
-
-      // Each time new words come in, rebuild the text from all results so far.
+      // Rebuild the live text from all results so far.
       recognition.onresult = (event) => {
-        let finalText = '';
-        let interimText = '';
+        let finalText = '', interimText = '';
         for (let i = 0; i < event.results.length; i++) {
           const piece = event.results[i][0].transcript;
-          if (event.results[i].isFinal) finalText += piece;
+          if (event.results[i].isFinal) { finalText += piece; hadFinal = true; }
           else interimText += piece;
         }
         sessionText = (finalText + ' ' + interimText).trim();
@@ -310,68 +527,178 @@
       };
 
       recognition.onend = () => {
-        running = false;
-        if (holding) {
-          // Browser stopped on its own (e.g. a pause) but the button is still
-          // held: keep what we have and start listening again.
-          savedText = (savedText + ' ' + sessionText).trim();
-          sessionText = '';
-          startRecognizer();
-        } else {
-          finishLine();
+        recRunning = false;
+
+        if (mode === 'hold') {
+          if (holding) {
+            // Browser stopped on its own during a pause, but the button is
+            // still held: keep what we have and keep listening.
+            savedText = (savedText + ' ' + sessionText).trim();
+            sessionText = '';
+            startRecognizer(true);
+          } else {
+            finishHoldLine();
+          }
+          return;
         }
+
+        // Hands-free: one utterance per recognition run (ends on a pause).
+        if (phase !== 'listening') return;   // we stopped it on purpose
+        const text = sessionText;
+        sessionText = '';
+        liveEl.textContent = '';
+        if (text && addTranscriptLine(text)) return;  // Claude takes it from here
+        // Heard nothing (or no key / stop phrase): listen again if still on.
+        if (conversationOn) startListening(); else setPhase('idle');
       };
 
       recognition.onerror = (event) => {
+        if (event.error === 'no-speech' || event.error === 'aborted') return; // onend handles it
         const messages = {
-          'not-allowed':   'Microphone access was blocked. Allow the mic for this site and make sure the page is opened over HTTPS.',
+          'not-allowed': 'Microphone access was blocked. Allow the mic for this site and make sure the page is opened over HTTPS.',
           'service-not-allowed': 'Speech service not allowed. Try Chrome, over HTTPS.',
           'audio-capture': 'No microphone was found.',
-          'network':       'Network error — Chrome needs an internet connection for speech recognition.',
+          'network': 'Network error — Chrome needs an internet connection for speech recognition.',
         };
-        if (event.error === 'no-speech' || event.error === 'aborted') return;
         showStatus(messages[event.error] || ('Speech error: ' + event.error), true);
-        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        if (['not-allowed', 'service-not-allowed', 'audio-capture'].includes(event.error)) {
           holding = false;
-          talkBtn.classList.remove('listening');
-          talkBtn.textContent = 'Hold to talk';
+          stopConversation();
         }
       };
+    }
 
-      // ---- Button: Pointer Events cover mouse, touch and pen in one go ----
-      talkBtn.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        talkBtn.setPointerCapture(e.pointerId); // keep getting 'up' even if finger slides off
-        start();
-      });
-      talkBtn.addEventListener('pointerup', stop);
-      talkBtn.addEventListener('pointercancel', stop);
-      talkBtn.addEventListener('lostpointercapture', stop);
-      talkBtn.addEventListener('contextmenu', (e) => e.preventDefault()); // no long-press menu
+    function startRecognizer(continuous) {
+      if (recRunning) return;
+      recognition.continuous = continuous;
+      try { recognition.start(); recRunning = true; } catch { /* already running */ }
+    }
 
-      // Bonus: hold the spacebar to talk on a laptop.
-      document.addEventListener('keydown', (e) => {
-        if (e.code === 'Space' && !e.repeat && e.target === document.body) {
-          e.preventDefault();
-          start();
-        }
-      });
-      document.addEventListener('keyup', (e) => {
-        if (e.code === 'Space') stop();
-      });
+    function stopRecognizer() {
+      if (recRunning) recognition.abort();
+      recRunning = false;
+    }
+
+    // ---- Hands-free ----
+    function startListening() {
+      sessionText = '';
+      hadFinal = false;
+      liveEl.textContent = '';
+      setPhase('listening');
+      startRecognizer(false);
+    }
+
+    function startConversation() {
+      if (!apiKey) showStatus('No API key saved: I’ll transcribe, but Claude won’t reply. Tap ⚙️ API key.');
+      else showStatus('Conversation on. Say “stop” to end it.');
+      conversationOn = true;
+      startListening();
+    }
+
+    function stopConversation() {
+      conversationOn = false;
+      stopRecognizer();
+      stopSpeaking();
+      liveEl.textContent = '';
+      setPhase('idle');
+    }
+
+    // ---- Hold to talk ----
+    function holdStart() {
+      if (holding || phase === 'thinking') return;   // wait for Claude's reply first
+      stopSpeaking();            // holding interrupts Claude
+      holding = true;
+      savedText = ''; sessionText = '';
+      liveEl.textContent = '';
+      showStatus('');
+      setPhase('listening');
+      startRecognizer(true);
+    }
+
+    function holdEnd() {
+      if (!holding) return;
+      holding = false;
+      if (recRunning) recognition.stop();   // onend will finish the line
+      else finishHoldLine();
+    }
+
+    function finishHoldLine() {
+      const text = (savedText + ' ' + sessionText).trim();
+      savedText = ''; sessionText = '';
+      liveEl.textContent = '';
+      if (phase === 'listening') setPhase('idle');
+      addTranscriptLine(text);
     }
 
     // =====================================================================
-    // Clear and Copy all
+    // Button wiring. Pointer Events cover mouse, touch and pen in one go.
     // =====================================================================
-    clearBtn.addEventListener('click', () => {
+    talkBtn.addEventListener('pointerdown', (e) => {
+      if (!recognition) return;
+      e.preventDefault();
+      if (mode === 'hold') {
+        talkBtn.setPointerCapture(e.pointerId); // keep getting 'up' even if the finger slides off
+        holdStart();
+        return;
+      }
+      // Hands-free: a tap does whatever the label says.
+      if (phase === 'idle') startConversation();
+      else if (phase === 'speaking') { stopSpeaking(); startListening(); }   // interrupt
+      else stopConversation();
+    });
+    talkBtn.addEventListener('pointerup', () => { if (mode === 'hold') holdEnd(); });
+    talkBtn.addEventListener('pointercancel', () => { if (mode === 'hold') holdEnd(); });
+    talkBtn.addEventListener('lostpointercapture', () => { if (mode === 'hold') holdEnd(); });
+    talkBtn.addEventListener('contextmenu', (e) => e.preventDefault()); // no long-press menu
+
+    // Spacebar: hold to talk, or tap to start/stop in hands-free.
+    document.addEventListener('keydown', (e) => {
+      if (e.code !== 'Space' || e.repeat || e.target !== document.body || !recognition) return;
+      e.preventDefault();
+      if (mode === 'hold') holdStart();
+      else talkBtn.dispatchEvent(new PointerEvent('pointerdown'));
+    });
+    document.addEventListener('keyup', (e) => {
+      if (e.code === 'Space' && mode === 'hold') holdEnd();
+    });
+
+    modeBtn.addEventListener('click', () => {
+      stopConversation();
+      holding = false;
+      mode = mode === 'hold' ? 'handsfree' : 'hold';
+      store.set('pace-mode', mode);
+      showStatus('');
+      setPhase('idle');
+    });
+
+    // ---- Settings ----
+    $('settingsBtn').addEventListener('click', () => {
+      settingsEl.classList.toggle('open');
+      if (settingsEl.classList.contains('open')) { keyInput.value = apiKey; keyInput.focus(); }
+    });
+    $('saveKey').addEventListener('click', () => {
+      apiKey = keyInput.value.trim();
+      if (apiKey) store.set('pace-api-key', apiKey); else store.del('pace-api-key');
+      settingsEl.classList.remove('open');
+      showStatus(apiKey ? 'API key saved in this browser.' : 'No key saved.');
+    });
+    $('forgetKey').addEventListener('click', () => {
+      apiKey = '';
+      keyInput.value = '';
+      store.del('pace-api-key');
+      showStatus('API key removed from this browser.');
+    });
+
+    // ---- Clear and Copy all ----
+    $('clear').addEventListener('click', () => {
       lines.length = 0;
+      history.length = 0;      // also starts a fresh conversation with Claude
       transcriptEl.innerHTML = '';
       liveEl.textContent = '';
       showStatus('');
     });
 
-    copyBtn.addEventListener('click', async () => {
+    $('copy').addEventListener('click', async () => {
       const text = lines.join('\n');
       if (!text) { showStatus('Nothing to copy yet.'); return; }
       try {
@@ -387,6 +714,10 @@
       }
       showStatus('Copied ' + lines.length + ' line(s) to the clipboard.');
     });
+
+    // First paint
+    setPhase('idle');
+    if (!apiKey && recognition) showStatus('Tip: tap ⚙️ API key and paste your Anthropic key so Claude can talk back.');
   </script>
 </body>
 </html>
