@@ -21,7 +21,20 @@ Each install keeps its own saved keys, so paste your key once more inside the in
 ## Keeping it yours
 The page itself is public (GitHub Pages can't password-protect a site on a personal account), but it's useless to anyone else: your API key and GitHub token live only in your own browser, so visitors would have to bring their own. It's also marked `noindex` so search engines skip it.
 
-For your own devices, set a **passcode** in Settings. Your key and token are then stored encrypted, and Pace asks for the passcode each time it opens (**Lock now** locks it right away).
+Built-in protections, with or without a passcode:
+- The page loads nothing from other sites, and a Content Security Policy only lets it talk to `api.anthropic.com` and `api.github.com`, so even injected code couldn't send your keys anywhere else.
+- Claude's replies are drawn as plain text, never as HTML.
+- Claude never sees your keys; it only asks Pace to run tools.
+- Saved keys are never shown again in Settings (only their last 4 characters).
+- Pace refuses to run inside another site's frame.
+
+**Without a passcode**, the keys sit unencrypted in this browser's storage. That's fine on a device only you use with its own lock screen, but anyone using your unlocked browser could use Pace or dig the keys out.
+
+**With a passcode** (Settings), the keys are stored encrypted (AES-256, key derived with PBKDF2 at 600,000 rounds). Pace asks for the passcode when it opens and again after 15 minutes in the background; **Lock now** locks it right away. Use 6+ characters; a few random words is strongest, because someone who copies your browser's storage could try short passcodes offline.
+
+**If you forget the passcode**, there's no recovery and no back door: tap *Forgot it? Erase saved keys* (twice) and paste them in again. Erasing only deletes, so it doesn't help anyone else get in. Anthropic shows a key only once, so you may need to make a new one in the Console (and delete the old one).
+
+**If a key ever leaks**, delete it in the Anthropic Console and the token on GitHub; both stop working at once. Give the GitHub token an expiry date.
 
 To hide the page from everyone else entirely, host it on Cloudflare Pages behind **Cloudflare Access** (free for personal use), which asks for a one-time code sent to your email before the page loads at all.
 
@@ -29,10 +42,14 @@ To hide the page from everyone else entirely, host it on Cloudflare Pages behind
 In **⚙️ Settings → Code in a GitHub repo**, fill in:
 
 - **Repo**: `owner/name`, e.g. `liujerry7/Pace`.
-- **Work branch**: where Claude commits (default `pace`). If it doesn't exist, Pace creates it from the default branch on the first change. Claude never commits to your default branch unless you name it here.
+- **Work branch**: where Claude commits (default `pace`). If it doesn't exist, Pace creates it from the default branch on the first change. Pace refuses to commit to the default branch, even if you type its name here, unless you tick **Allow commits straight to the default branch**.
 - **Token**: a GitHub fine-grained personal access token. Create one at GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → *Generate new token*: pick **Only select repositories** → your repo, and under **Repository permissions** set **Contents: Read and write**. It's stored only in this browser and sent only to `api.github.com`.
 
-Then just ask: "add a dark mode toggle to the settings page." Claude lists and reads files, edits them, and commits each change; the transcript shows each step, and a link to the branch appears when it's done. Review and merge from GitHub (open a pull request from the work branch).
+Then just ask: "add a dark mode toggle to the settings page." Claude lists and reads files, edits them, and commits each change; the transcript shows each step, and a link to the branch appears when it's done. Review and merge from GitHub (open a pull request from the work branch). Claude can't compile or run code, so build it yourself to check.
+
+**More repos later:** change **Repository** in Settings (recent ones are suggested as you type). The same token works if it can reach that repo: on GitHub, open the token, *Edit*, and add the repo under **Only select repositories**. The token's value doesn't change, so there's nothing to paste again.
+
+**Coding conventions:** Settings → *Coding conventions* holds your naming, class-design and clang-format rules (copied from your Lifeline docs). Claude follows them in code it writes and, when you ask for something that breaks them, writes the conforming version and says so in a sentence. A repo's own `CLAUDE.md`, `CONVENTIONS.md` or `.clang-format` wins. Edit the text freely; *Reset to the Lifeline version* brings back the original.
 
 ## GitHub Pages
 Settings → Pages → Build and deployment → Source: **Deploy from a branch** → branch `main`, folder `/ (root)` → Save.

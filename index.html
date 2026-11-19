@@ -4,8 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="theme-color" content="#0c0c10" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+  <!-- Lockdown: no outside scripts, styles or images, and the page can only talk to
+       Anthropic and GitHub, so nothing can ship your keys anywhere else. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.anthropic.com https://api.github.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#14130e" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f1de" media="(prefers-color-scheme: light)">
   <!-- Installable app: "Add to Home Screen" on iPhone, "Install app" in Chrome -->
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -16,53 +20,60 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Pace</title>
   <style>
-    /* ---------- Design tokens (dark by default, light follows the system) ---------- */
+    /* ---------- Design tokens: flat colours, shades of yellow and grey-yellow.
+                  Dark by default; light follows the system. ---------- */
     :root {
       color-scheme: dark;
-      --bg: #0c0c10;
-      --glow: rgba(244, 183, 64, .09);
-      --surface: #15151b;
-      --surface-2: #1d1d25;
-      --border: rgba(255, 255, 255, .08);
-      --text: #ececf1;
-      --muted: #8d8d9a;
-      --faint: #5d5d6a;
-      --accent: #f4b740;
-      --accent-ink: #1c1405;
-      --live: #ff5d5d;
-      --think: #6aa8ff;
-      --speak: #4ade80;
-      --user-bubble: #262014;
-      --user-border: rgba(244, 183, 64, .22);
-      --error-bg: rgba(255, 93, 93, .12);
-      --error: #ff8f8f;
-      --shadow: 0 18px 50px rgba(0, 0, 0, .5);
+      --bg: #14130e;          /* near-black olive */
+      --surface: #1d1b14;
+      --surface-2: #27241a;
+      --border: #36321f;
+      --text: #f3efdf;        /* cream */
+      --muted: #aaa38a;       /* grey-yellow */
+      --faint: #6f6a55;
+      --accent: #f0c43c;      /* Pace yellow: idle orb, buttons */
+      --accent-ink: #1d1806;
+      --link: #f0c43c;
+      --st-listen: #ffdd33;   /* bright lemon while listening */
+      --st-think: #9b9268;    /* khaki while working */
+      --st-think-ink: #14130e;
+      --st-speak: #efe2b0;    /* pale butter while speaking */
+      --user-bubble: #3b3319; /* mustard */
+      --code-bg: #0d0c08;
+      --code-text: #ebe6d2;
+      --error-bg: #3a2614;
+      --error: #f0a060;       /* burnt ochre */
       --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     }
     @media (prefers-color-scheme: light) {
       :root {
         color-scheme: light;
-        --bg: #f6f5f2;
-        --glow: rgba(244, 183, 64, .2);
-        --surface: #ffffff;
-        --surface-2: #f0eee9;
-        --border: rgba(0, 0, 0, .09);
-        --text: #1b1b20;
-        --muted: #6b6b77;
-        --faint: #a3a3ad;
-        --accent: #eaa21c;
-        --user-bubble: #fdf0d5;
-        --user-border: rgba(234, 162, 28, .35);
-        --error-bg: rgba(220, 38, 38, .08);
-        --error: #b42318;
-        --shadow: 0 18px 50px rgba(0, 0, 0, .14);
+        --bg: #f6f1de;
+        --surface: #fffbec;
+        --surface-2: #efe7c9;
+        --border: #e2d8b2;
+        --text: #2b2713;
+        --muted: #756e52;
+        --faint: #ada584;
+        --accent: #e8b52a;
+        --accent-ink: #2b2306;
+        --link: #8a6a00;
+        --st-listen: #ffcc00;
+        --st-think: #a89b5f;
+        --st-think-ink: #fffbec;
+        --st-speak: #f3dd8a;
+        --user-bubble: #f4df97;
+        --code-bg: #2b2713;
+        --code-text: #f3efdf;
+        --error-bg: #f7dfc8;
+        --error: #9a4210;
       }
     }
 
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; }
     body {
-      background: radial-gradient(1100px 520px at 50% -12%, var(--glow), transparent 65%), var(--bg);
+      background: var(--bg);
       color: var(--text);
       font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
       -webkit-font-smoothing: antialiased;
@@ -101,12 +112,11 @@
       width: 10px; height: 10px;
       border-radius: 50%;
       background: var(--accent);
-      box-shadow: 0 0 12px var(--accent);
-      transition: background .3s, box-shadow .3s;
+      transition: background .3s;
     }
-    [data-phase="listening"] .dot { background: var(--live);  box-shadow: 0 0 12px var(--live); }
-    [data-phase="thinking"]  .dot { background: var(--think); box-shadow: 0 0 12px var(--think); }
-    [data-phase="speaking"]  .dot { background: var(--speak); box-shadow: 0 0 12px var(--speak); }
+    [data-phase="listening"] .dot { background: var(--st-listen); }
+    [data-phase="thinking"]  .dot { background: var(--st-think); }
+    [data-phase="speaking"]  .dot { background: var(--st-speak); }
     .top-actions { display: flex; align-items: center; gap: 8px; }
 
     .pill {
@@ -145,7 +155,7 @@
     #status.error {
       color: var(--error);
       background: var(--error-bg);
-      border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+      border: none;
       padding: 10px 14px;
       border-radius: 12px;
       text-align: left;
@@ -183,7 +193,6 @@
       max-width: 85%;
       padding: 10px 15px;
       background: var(--user-bubble);
-      border: 1px solid var(--user-border);
       border-radius: 20px 20px 6px 20px;
     }
     #transcript li.assistant { font-size: 16.5px; line-height: 1.65; }
@@ -213,23 +222,23 @@
       font-size: 13.5px;
       color: var(--muted);
     }
-    #transcript li.info a { color: var(--accent); text-decoration: none; }
+    #transcript li.info a { color: var(--link); text-decoration: none; font-weight: 600; }
     #transcript pre {
       margin: 10px 0;
       padding: 12px 14px;
-      background: #0a0a0d;
-      color: #e6e6ea;
-      border: 1px solid var(--border);
+      background: var(--code-bg);
+      color: var(--code-text);
       border-radius: 12px;
       overflow-x: auto;
       font: 13.5px/1.55 var(--mono);
       white-space: pre;
+      tab-size: 4;
     }
 
     /* ---------- Bottom dock: live words, the orb, quick actions ---------- */
     .dock {
       padding: 6px 16px calc(14px + env(safe-area-inset-bottom));
-      background: linear-gradient(to top, var(--bg) 65%, transparent);
+      background: var(--bg);
     }
     #live {
       min-height: 1.6em;
@@ -253,9 +262,8 @@
       border: none;
       border-radius: 50%;
       color: var(--accent-ink);
-      background: radial-gradient(circle at 32% 26%, #ffd889, var(--accent) 55%, #d98a10);
-      box-shadow: 0 10px 30px rgba(244, 183, 64, .35);
-      transition: transform .15s, background .3s, box-shadow .3s;
+      background: var(--accent);
+      transition: transform .15s, background .3s;
       user-select: none;
       -webkit-user-select: none;
       -webkit-touch-callout: none;
@@ -264,14 +272,12 @@
     #talk svg { width: 32px; height: 32px; }
     #talk:active { transform: scale(.95); }
     #talk.listening {
-      color: #fff;
-      background: radial-gradient(circle at 32% 26%, #ffa3a3, var(--live) 60%, #d63c3c);
+      background: var(--st-listen);
       animation: pulse 1.4s ease-out infinite;
     }
     #talk.thinking {
-      color: #fff;
-      background: radial-gradient(circle at 32% 26%, #b3d2ff, var(--think) 60%, #3d7fe0);
-      box-shadow: 0 10px 30px rgba(106, 168, 255, .3);
+      color: var(--st-think-ink);
+      background: var(--st-think);
     }
     #talk.thinking::after {
       content: "";
@@ -279,19 +285,22 @@
       inset: -7px;
       border-radius: 50%;
       border: 2px solid transparent;
-      border-top-color: var(--think);
-      border-right-color: var(--think);
+      border-top-color: var(--st-think);
+      border-right-color: var(--st-think);
       animation: spin 1s linear infinite;
     }
     #talk.speaking {
-      color: #06240f;
-      background: radial-gradient(circle at 32% 26%, #b4f5cc, var(--speak) 60%, #22b35c);
+      background: var(--st-speak);
       animation: breathe 1.6s ease-in-out infinite;
     }
-    #talk:disabled { background: var(--surface-2); color: var(--faint); box-shadow: none; cursor: not-allowed; }
-    @keyframes pulse { from { box-shadow: 0 0 0 0 rgba(255, 93, 93, .5); } to { box-shadow: 0 0 0 24px rgba(255, 93, 93, 0); } }
+    #talk:disabled { background: var(--surface-2); color: var(--faint); cursor: not-allowed; }
+    /* Flat rings (solid colour fading out), no glows. */
+    @keyframes pulse {
+      from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--st-listen) 55%, transparent); }
+      to   { box-shadow: 0 0 0 24px color-mix(in srgb, var(--st-listen) 0%, transparent); }
+    }
     @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes breathe { 50% { transform: scale(1.06); box-shadow: 0 0 0 12px rgba(74, 222, 128, .12); } }
+    @keyframes breathe { 50% { transform: scale(1.06); box-shadow: 0 0 0 10px color-mix(in srgb, var(--st-speak) 22%, transparent); } }
     .talk-label { margin-top: 10px; text-align: center; font-size: 13.5px; color: var(--muted); }
 
     @media (min-width: 768px) {
@@ -313,9 +322,8 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 22px;
-      box-shadow: var(--shadow);
     }
-    dialog::backdrop { background: rgba(0, 0, 0, .5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+    dialog::backdrop { background: rgba(10, 9, 5, .6); }
     @media (max-width: 640px) {
       dialog {
         width: 100%;
@@ -351,7 +359,21 @@
       outline: none;
       transition: border-color .15s, box-shadow .15s;
     }
-    .field input:focus, .field select:focus {
+    .field textarea {
+      width: 100%;
+      min-height: 180px;
+      padding: 12px 14px;
+      font: 13px/1.5 var(--mono);
+      color: var(--text);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      outline: none;
+      resize: vertical;
+    }
+    .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+    .check input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); flex: none; }
+    .field input:focus, .field select:focus, .field textarea:focus {
       border-color: var(--accent);
       box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
     }
@@ -382,7 +404,7 @@
       display: grid;
       place-items: center;
       padding: 24px;
-      background: radial-gradient(900px 480px at 50% -10%, var(--glow), transparent 65%), var(--bg);
+      background: var(--bg);
     }
     .lock[hidden] { display: none; }
     .lock-card { width: 100%; max-width: 340px; display: flex; flex-direction: column; gap: 14px; text-align: center; }
@@ -390,6 +412,7 @@
     .lock-card .dot { width: 14px; height: 14px; }
     .lock-card p { margin: 0; color: var(--muted); font-size: 15px; }
     .lock-error { min-height: 1.3em; color: var(--error) !important; font-size: 14px !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .link { background: none; border: none; color: var(--muted); font-size: 13.5px; text-decoration: underline; }
   </style>
 </head>
@@ -465,11 +488,12 @@
         <section>
           <h3>GitHub repo <span class="opt">· optional</span></h3>
           <p class="hint">Lets Claude read your repo and commit changes to a work branch (created from the default
-            branch if needed), never straight to your default branch. Use a fine-grained token for just this repo with
-            <b>Contents: Read and write</b>. Sent only to api.github.com.</p>
+            branch if needed), never straight to your default branch. Use a fine-grained token with
+            <b>Contents: Read and write</b> on just the repos you want. Sent only to api.github.com.</p>
           <div class="field">
             <label for="ghRepoInput">Repository</label>
-            <input id="ghRepoInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="owner/repo">
+            <input id="ghRepoInput" type="text" list="repoList" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="owner/repo">
+            <datalist id="repoList"></datalist>
           </div>
           <div class="field">
             <label for="ghBranchInput">Work branch</label>
@@ -479,11 +503,26 @@
             <label for="ghTokenInput">Token</label>
             <input id="ghTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
           </div>
+          <label class="check"><input id="allowDefaultInput" type="checkbox">
+            <span>Allow commits straight to the default branch (main). Leave this off until you trust Pace.</span></label>
+        </section>
+
+        <section>
+          <h3>Coding conventions</h3>
+          <p class="hint">Claude follows these in code it writes and suggests them when you ask for something that
+            breaks them. A repo's own CLAUDE.md, CONVENTIONS.md or .clang-format wins. Copied from your Lifeline docs.</p>
+          <div class="field">
+            <label for="convInput" class="sr-only">Coding conventions</label>
+            <textarea id="convInput" spellcheck="false"></textarea>
+          </div>
+          <button id="convReset" class="btn" type="button" style="align-self: flex-start">Reset to the Lifeline version</button>
         </section>
 
         <section>
           <h3>Passcode lock <span class="opt">· optional</span></h3>
-          <p class="hint" id="lockHint">Encrypts your saved key and token in this browser. Pace asks for the passcode each time it opens.</p>
+          <p class="hint" id="lockHint">Encrypts your saved key and token in this browser. Pace asks for the passcode when
+            it opens, and again after 15 minutes in the background. Use 6+ characters; a few words is strongest.
+            There's no recovery: if you forget it, erase and paste your keys again.</p>
           <div class="field">
             <label for="passInput" id="passLabel">Passcode</label>
             <input id="passInput" type="password" autocomplete="new-password" placeholder="Set a passcode">
@@ -517,6 +556,12 @@
   </div>
 
   <script>
+    // Refuse to run inside someone else's page (a frame could trick your taps).
+    if (window.self !== window.top && location.protocol !== 'file:') {
+      document.body.textContent = 'Pace can only be opened directly, not inside another page.';
+      throw new Error('Pace was framed');
+    }
+
     // =====================================================================
     // Settings you might want to tweak
     // =====================================================================
@@ -529,6 +574,24 @@
     const MAX_TOOL_ROUNDS = 60;       // safety stop for one spoken request
     const MAX_FILE_CHARS = 300000;    // longest file handed to Claude in one read
     const DEFAULT_BRANCH = 'pace';    // work branch when none is set
+    const AUTO_LOCK_MS = 15 * 60 * 1000;   // with a passcode, lock after this long in the background
+    const MIN_PASSCODE = 6;
+
+    // Jerry's conventions, from the Lifeline docs "Coding conventions standard"
+    // and "Visual Studio setup" (.clang-format). Editable in Settings.
+    const DEFAULT_CONVENTIONS = `C++ (apply the spirit to other languages; a repo's own rules win)
+
+Function verbs: Get/Set = cheap read or write. Compute = derived, possibly expensive. Find = search that can fail (returns null). Try = attempts and returns whether it worked (the only kind of function that returns success). Is/Has/Can = bool question, no side effects (functions only). Make = builds and returns a value. Create/Destroy = heap allocation someone must free. Spawn = creates an entity in a world. Add/Remove = container membership only, never deletes. Pick = chooses from candidates. Resolve = a frame phase that detects and responds (ResolveBulletHits). Poll = reads input. Apply = applies an effect. Load/Save = disk I/O. Startup/Shutdown = system lifecycle. BeginFrame/EndFrame = per-frame bookends. Update(deltaSeconds) returns void; Render() const. On... = event callback after something happened.
+
+Data bundles: Breed = data shared by every instance of a kind (Type Object). Settings = options for one instance (Parameter Object). Both read-only at runtime; const helpers about their own data are fine.
+
+Type suffixes: ...Result (query result struct), ...System (engine service; never "Manager"), ...Repo (owns a collection), ...Utils (free functions), ...Common (shared constants), ...ID (non-pointer handle).
+
+Variables: m_ members, s_ statics, g_ globals, ALL_CAPS constants. Bool variables name the state with no is/has/can prefix (m_dead, m_solid, fireHeld); those prefixes are only for functions. Counts use num (m_numLeos, NUM_TILE_TYPES). max/min as prefixes (m_maxSpeed). Units in the name when ambiguous (Seconds, Degrees, Radians).
+
+Classes: at most one base class with data or function bodies. Interfaces: I-prefixed, only pure virtuals plus a virtual destructor, no data; inherit as many as needed. Prefer composition for mixing behaviours. Inheritance is for behaviour that differs; data that differs goes in a Breed or Settings. Ask about properties (tile.IsSolid()), never switch on a type enum to decide behaviour.
+
+Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. Allman braces. No single-line functions, ifs, loops or blocks. Pointer and reference attach to the type (int* p). When a call or parameter list wraps, one per line. Constructor initializers break before the comma. Newline at end of file. Includes sorted: <windows.h>, then <system>, then "Engine/...", then "Game/...", then the rest.`;
 
     const BASE_PROMPT =
       'You are Pace, a hands-free voice coding assistant. The user talks to you out loud; ' +
@@ -539,6 +602,16 @@
       'in conversation, put it in a fenced code block. Code blocks are shown on screen and ' +
       'are NOT read aloud, so in the spoken part just say briefly what you wrote. ' +
       'If something is ambiguous, ask one short question.';
+
+    function conventionsPrompt(text) {
+      return '\n\nThe user\'s coding conventions are below. Follow them in all code you write. If the repo has ' +
+        'its own conventions (CLAUDE.md, CONVENTIONS.md, .clang-format, .editorconfig), those win; check for them ' +
+        'before your first change. When the user asks for something that breaks a convention (for example a bool ' +
+        'named isDead, or a FooManager class), write the conforming version and say so in one short spoken ' +
+        'sentence, e.g. "I called it m_dead, per your bool rule." Do not lecture. Do not rewrite unrelated existing ' +
+        'code to match unless asked; if you notice a clear violation nearby, you may mention it once.\n\n' +
+        '<conventions>\n' + text + '\n</conventions>';
+    }
 
     function codingPrompt(repo, branch) {
       return '\n\nYou are connected to the GitHub repository ' + repo + ' and can read and ' +
@@ -552,8 +625,10 @@
         'contents or diffs into your reply: the code is in the commits. When you are done, ' +
         'say in a sentence or two what you changed and anything the user should check. If a ' +
         'request is ambiguous in a way that changes what you would build, ask one short ' +
-        'question before changing files. Use JavaScript for standalone snippets unless the ' +
-        'user names another language or the repo clearly uses one.';
+        'question before changing files. You cannot compile or run code, so be careful with ' +
+        'syntax, includes and declarations, and tell the user what to build or try. Keep each ' +
+        'file\'s existing line endings and indentation. Use JavaScript for standalone snippets ' +
+        'unless the user names another language or the repo clearly uses one.';
     }
 
     // Saying one of these (on its own) ends a hands-free conversation.
@@ -601,7 +676,11 @@
       repo:   store.get('pace-gh-repo') || '',
       branch: store.get('pace-gh-branch') || DEFAULT_BRANCH,
       token:  store.get('pace-gh-token') || '',
+      allowDefault: store.get('pace-gh-allow-default') === '1',
     };
+    // null = use the built-in defaults (so later updates to them reach you).
+    let conventions = store.get('pace-conventions');
+    const conventionsText = () => (conventions === null ? DEFAULT_CONVENTIONS : conventions).trim();
     const codingOn = () => !!(gh.repo && gh.token);
 
     const lines = [];     // plain-text log for "Copy all"
@@ -846,7 +925,8 @@
         model: MODEL,
         max_tokens: 64000,
         stream: true,
-        system: BASE_PROMPT + (codingOn() ? codingPrompt(gh.repo, gh.branch) : ''),
+        system: BASE_PROMPT + (codingOn() ? codingPrompt(gh.repo, gh.branch) : '') +
+          (conventionsText() ? conventionsPrompt(conventionsText()) : ''),
         // Reasoning stays hidden; short progress notes between tool calls come back as text.
         thinking: { type: 'adaptive', display: 'updates' },
         output_config: { effort },
@@ -1225,6 +1305,12 @@
     }
     async function ensureBranch(signal) {
       const b = await getBranchState(signal);
+      // Safety rail: never commit to the default branch unless you've turned that on.
+      if (gh.branch === b.base && !gh.allowDefault) {
+        throw new Error('Not committing: ' + gh.branch + ' is the default branch, and Pace is set to work on a ' +
+          'separate branch. Ask the user to clear the Work branch field in Settings (so it uses "pace"), or to ' +
+          'turn on "Allow commits straight to the default branch".');
+      }
       if (b.exists) return;
       const base = await ghFetch('/git/ref/heads/' + encodePath(b.base), null, signal);
       await ghFetch('/git/refs', { method: 'POST', body: { ref: 'refs/heads/' + gh.branch, sha: base.object.sha } }, signal);
@@ -1322,7 +1408,12 @@
       async write_file(input, signal) {
         await ensureBranch(signal);
         const existing = await getFile(input.path, gh.branch, signal, true);
-        const commit = await putFile(input.path, input.content, input.message, existing && existing.sha, signal);
+        let content = input.content;
+        // Keep Windows line endings if the file had them.
+        if (existing && existing.text && existing.text.includes('\r\n') && !content.includes('\r')) {
+          content = content.replace(/\n/g, '\r\n');
+        }
+        const commit = await putFile(input.path, content, input.message, existing && existing.sha, signal);
         addLine('tool', (existing ? '💾 Rewrote ' : '🆕 Created ') + input.path + ' (' + commit + ')');
         return { text: (existing ? 'Replaced ' : 'Created ') + input.path + '. Commit ' + commit + ' on ' + gh.branch + '.', wrote: true };
       },
@@ -1579,12 +1670,24 @@
     }
 
     // ---- Settings ----
+    // Saved secrets are never put back into the form, so they can't be read off
+    // the screen. A blank field keeps what's saved.
+    const savedHint = (secret, fallback) => secret ? 'Saved, ends in ' + secret.slice(-4) + ' (blank keeps it)' : fallback;
+    const recentRepos = () => { try { return JSON.parse(store.get('pace-gh-recent')) || []; } catch { return []; } };
+
     function openSettings() {
-      keyInput.value = apiKey;
+      keyInput.value = '';
+      keyInput.placeholder = savedHint(apiKey, 'sk-ant-…');
       effortInput.value = effort;
       ghRepoInput.value = gh.repo;
       ghBranchInput.value = gh.branch === DEFAULT_BRANCH ? '' : gh.branch;
-      ghTokenInput.value = gh.token;
+      ghTokenInput.value = '';
+      ghTokenInput.placeholder = savedHint(gh.token, 'github_pat_…');
+      $('allowDefaultInput').checked = gh.allowDefault;
+      $('convInput').value = conventionsText();
+      const list = $('repoList');
+      list.textContent = '';
+      recentRepos().forEach((r) => { const o = document.createElement('option'); o.value = r; list.appendChild(o); });
       passInput.value = '';
       refreshLockUI();
       settingsEl.showModal();
@@ -1604,23 +1707,29 @@
         return;
       }
       const pass = passInput.value;
-      if (pass && pass.length < 4) {
-        passInput.setCustomValidity('Use at least 4 characters.');
+      if (pass && pass.length < MIN_PASSCODE) {
+        passInput.setCustomValidity('Use at least ' + MIN_PASSCODE + ' characters.');
         passInput.reportValidity();
         passInput.setCustomValidity('');
         return;
       }
 
-      apiKey = keyInput.value.trim();
+      apiKey = keyInput.value.trim() || apiKey;
       effort = effortInput.value;
       const before = gh.repo + '|' + gh.branch + '|' + codingOn();
       gh.repo = repo;
       gh.branch = ghBranchInput.value.trim() || DEFAULT_BRANCH;
-      gh.token = ghTokenInput.value.trim();
+      gh.token = ghTokenInput.value.trim() || gh.token;
+      gh.allowDefault = $('allowDefaultInput').checked;
+      const conv = $('convInput').value.trim();
+      conventions = conv === DEFAULT_CONVENTIONS.trim() ? null : conv;
 
       store.set('pace-effort', effort);
       saveOrDelete('pace-gh-repo', gh.repo);
       saveOrDelete('pace-gh-branch', gh.branch === DEFAULT_BRANCH ? '' : gh.branch);
+      saveOrDelete('pace-gh-allow-default', gh.allowDefault ? '1' : '');
+      if (conventions === null) store.del('pace-conventions'); else store.set('pace-conventions', conventions);
+      if (gh.repo) store.set('pace-gh-recent', JSON.stringify([gh.repo, ...recentRepos().filter((r) => r !== gh.repo)].slice(0, 8)));
       if (pass) {
         vaultSalt = crypto.getRandomValues(new Uint8Array(16));
         vaultKey = await deriveKey(pass, vaultSalt);
@@ -1641,7 +1750,16 @@
       );
     });
 
+    $('convReset').addEventListener('click', () => { $('convInput').value = DEFAULT_CONVENTIONS; });
+
     $('lockNow').addEventListener('click', () => location.reload());
+
+    // With a passcode, lock again after a while in the background.
+    let hiddenAt = 0;
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { hiddenAt = Date.now(); return; }
+      if (vaultKey && hiddenAt && Date.now() - hiddenAt > AUTO_LOCK_MS) location.reload();
+    });
 
     $('removeLock').addEventListener('click', async () => {
       vaultKey = null; vaultSalt = null;
