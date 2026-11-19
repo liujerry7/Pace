@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <title>Voice Code</title>
+  <style>
+    /* ---------- Theme: dark, high contrast, big text (readable on a TV) ---------- */
+    :root {
+      --bg: #000000;
+      --panel: #121212;
+      --border: #3a3a3a;
+      --text: #ffffff;
+      --muted: #b0b0b0;
+      --accent: #ffd400;      /* bright yellow: idle button */
+      --live: #ff3b3b;        /* red: currently listening */
+      --ok: #3ddc84;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 16px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 3vw, 2.5rem);
+    }
+
+    /* Message shown when speech recognition is unavailable or fails */
+    #status {
+      font-size: clamp(1.1rem, 2.2vw, 1.6rem);
+      color: var(--muted);
+      min-height: 1.4em;
+    }
+    #status.error {
+      color: #000;
+      background: var(--live);
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-weight: 700;
+    }
+
+    /* ---------- The big Hold-to-talk button ---------- */
+    #talk {
+      width: 100%;
+      min-height: 160px;
+      font-size: clamp(2rem, 6vw, 4rem);
+      font-weight: 800;
+      color: #000;
+      background: var(--accent);
+      border: none;
+      border-radius: 24px;
+      cursor: pointer;
+      /* Stop phones from selecting text / showing menus on long press */
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: none;
+    }
+    #talk.listening {
+      background: var(--live);
+      color: #fff;
+      box-shadow: 0 0 0 8px rgba(255, 59, 59, 0.35);
+    }
+    #talk:disabled {
+      background: #444;
+      color: #888;
+      cursor: not-allowed;
+    }
+
+    /* ---------- Live (interim) text while speaking ---------- */
+    #live {
+      min-height: 2.6em;
+      padding: 16px 20px;
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 16px;
+      font-size: clamp(1.8rem, 5vw, 3.5rem);
+      line-height: 1.25;
+      font-weight: 600;
+      word-wrap: break-word;
+    }
+    #live:empty::before {
+      content: "Hold the button and speak…";
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    /* ---------- Toolbar ---------- */
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .toolbar button {
+      flex: 1 1 160px;
+      font-size: clamp(1.2rem, 2.5vw, 1.8rem);
+      font-weight: 700;
+      padding: 14px 20px;
+      background: var(--panel);
+      color: var(--text);
+      border: 2px solid var(--text);
+      border-radius: 14px;
+      cursor: pointer;
+    }
+    .toolbar button:active { background: #333; }
+
+    /* ---------- Transcript: numbered lines, newest at the bottom ---------- */
+    #transcript {
+      flex: 1 1 auto;
+      min-height: 200px;
+      overflow-y: auto;
+      margin: 0;
+      padding: 12px 20px 12px 0;
+      list-style: none;
+      counter-reset: line;
+      background: var(--panel);
+      border: 2px solid var(--border);
+      border-radius: 16px;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-size: clamp(1.3rem, 3vw, 2.2rem);
+      line-height: 1.4;
+    }
+    #transcript li {
+      counter-increment: line;
+      display: flex;
+      gap: 16px;
+      padding: 6px 0;
+      border-bottom: 1px solid #222;
+      word-break: break-word;
+    }
+    #transcript li::before {
+      content: counter(line);
+      flex: 0 0 3ch;
+      text-align: right;
+      color: var(--accent);
+      font-weight: 700;
+    }
+    #transcript li.newest { color: var(--ok); }
+  </style>
+</head>
+<body>
+  <h1>🎙️ Voice Code</h1>
+  <div id="status" role="status" aria-live="polite"></div>
+
+  <button id="talk" type="button">Hold to talk</button>
+
+  <!-- What is being heard right now -->
+  <div id="live" aria-live="polite"></div>
+
+  <div class="toolbar">
+    <button id="copy" type="button">Copy all</button>
+    <button id="clear" type="button">Clear</button>
+  </div>
+
+  <!-- Finished lines get added here -->
+  <ol id="transcript"></ol>
+
+  <script>
+    // =====================================================================
+    // Element references
+    // =====================================================================
+    const talkBtn      = document.getElementById('talk');
+    const liveEl       = document.getElementById('live');
+    const transcriptEl = document.getElementById('transcript');
+    const statusEl     = document.getElementById('status');
+    const copyBtn      = document.getElementById('copy');
+    const clearBtn     = document.getElementById('clear');
+
+    // All finished lines, in order. Index 0 is line 1.
+    const lines = [];
+
+    // =====================================================================
+    // TRANSCRIPT HANDLING — the one place every finished phrase goes.
+    //
+    // Later this is where we'll send `text` to an AI that turns phrases
+    // like "for i from zero to max length" into real code. To extend it,
+    // change what happens between "1." and "2." below (e.g. await a fetch
+    // and display the converted code alongside the spoken text).
+    // =====================================================================
+    function addTranscriptLine(text) {
+      text = text.trim();
+      if (!text) return;
+
+      // 1. Store the line.
+      lines.push(text);
+
+      // (Future: convert `text` to code here.)
+
+      // 2. Show it as a new numbered line at the bottom.
+      const prev = transcriptEl.querySelector('li.newest');
+      if (prev) prev.classList.remove('newest');
+
+      const li = document.createElement('li');
+      li.textContent = text;
+      li.classList.add('newest');
+      transcriptEl.appendChild(li);
+
+      // 3. Keep the newest line in view.
+      li.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+
+    // =====================================================================
+    // Status / error messages
+    // =====================================================================
+    function showStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.classList.toggle('error', isError);
+    }
+
+    // =====================================================================
+    // Speech recognition setup
+    // =====================================================================
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      talkBtn.disabled = true;
+      talkBtn.textContent = 'Not supported';
+      showStatus(
+        'Sorry — this browser does not support speech recognition. ' +
+        'Please open this page in Google Chrome (desktop or Android).',
+        true
+      );
+    } else {
+      setupRecognition();
+    }
+
+    function setupRecognition() {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = true;  // show words as they are heard
+      recognition.continuous = true;      // keep listening while the button is held
+
+      let holding = false;   // is the button currently held down?
+      let running = false;   // is the recognizer currently active?
+      let savedText = '';    // text from earlier segments of this same hold
+      let sessionText = '';  // best text from the current recognizer segment
+
+      // Start listening (called when the button is pressed)
+      function start() {
+        if (holding) return;
+        holding = true;
+        savedText = '';
+        sessionText = '';
+        liveEl.textContent = '';
+        talkBtn.classList.add('listening');
+        talkBtn.textContent = 'Listening… release to finish';
+        showStatus('');
+        startRecognizer();
+      }
+
+      // Stop listening (called when the button is released)
+      function stop() {
+        if (!holding) return;
+        holding = false;
+        talkBtn.classList.remove('listening');
+        talkBtn.textContent = 'Hold to talk';
+        if (running) {
+          recognition.stop();   // 'end' event will finish the line
+        } else {
+          finishLine();
+        }
+      }
+
+      function startRecognizer() {
+        try {
+          recognition.start();
+          running = true;
+        } catch (err) {
+          // start() throws if it's already running; safe to ignore.
+        }
+      }
+
+      // Send everything heard during this hold to the transcript.
+      function finishLine() {
+        const text = (savedText + ' ' + sessionText).trim();
+        savedText = '';
+        sessionText = '';
+        liveEl.textContent = '';
+        addTranscriptLine(text);
+      }
+
+      // Each time new words come in, rebuild the text from all results so far.
+      recognition.onresult = (event) => {
+        let finalText = '';
+        let interimText = '';
+        for (let i = 0; i < event.results.length; i++) {
+          const piece = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalText += piece;
+          else interimText += piece;
+        }
+        sessionText = (finalText + ' ' + interimText).trim();
+        liveEl.textContent = (savedText + ' ' + sessionText).trim();
+      };
+
+      recognition.onend = () => {
+        running = false;
+        if (holding) {
+          // Browser stopped on its own (e.g. a pause) but the button is still
+          // held: keep what we have and start listening again.
+          savedText = (savedText + ' ' + sessionText).trim();
+          sessionText = '';
+          startRecognizer();
+        } else {
+          finishLine();
+        }
+      };
+
+      recognition.onerror = (event) => {
+        const messages = {
+          'not-allowed':   'Microphone access was blocked. Allow the mic for this site and make sure the page is opened over HTTPS.',
+          'service-not-allowed': 'Speech service not allowed. Try Chrome, over HTTPS.',
+          'audio-capture': 'No microphone was found.',
+          'network':       'Network error — Chrome needs an internet connection for speech recognition.',
+        };
+        if (event.error === 'no-speech' || event.error === 'aborted') return;
+        showStatus(messages[event.error] || ('Speech error: ' + event.error), true);
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          holding = false;
+          talkBtn.classList.remove('listening');
+          talkBtn.textContent = 'Hold to talk';
+        }
+      };
+
+      // ---- Button: Pointer Events cover mouse, touch and pen in one go ----
+      talkBtn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        talkBtn.setPointerCapture(e.pointerId); // keep getting 'up' even if finger slides off
+        start();
+      });
+      talkBtn.addEventListener('pointerup', stop);
+      talkBtn.addEventListener('pointercancel', stop);
+      talkBtn.addEventListener('lostpointercapture', stop);
+      talkBtn.addEventListener('contextmenu', (e) => e.preventDefault()); // no long-press menu
+
+      // Bonus: hold the spacebar to talk on a laptop.
+      document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && !e.repeat && e.target === document.body) {
+          e.preventDefault();
+          start();
+        }
+      });
+      document.addEventListener('keyup', (e) => {
+        if (e.code === 'Space') stop();
+      });
+    }
+
+    // =====================================================================
+    // Clear and Copy all
+    // =====================================================================
+    clearBtn.addEventListener('click', () => {
+      lines.length = 0;
+      transcriptEl.innerHTML = '';
+      liveEl.textContent = '';
+      showStatus('');
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      const text = lines.join('\n');
+      if (!text) { showStatus('Nothing to copy yet.'); return; }
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // Fallback for browsers that block the clipboard API
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      showStatus('Copied ' + lines.length + ' line(s) to the clipboard.');
+    });
+  </script>
+</body>
+</html>
