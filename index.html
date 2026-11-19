@@ -625,8 +625,13 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         'contents or diffs into your reply: the code is in the commits. When you are done, ' +
         'say in a sentence or two what you changed and anything the user should check. If a ' +
         'request is ambiguous in a way that changes what you would build, ask one short ' +
-        'question before changing files. You cannot compile or run code, so be careful with ' +
-        'syntax, includes and declarations, and tell the user what to build or try. Keep each ' +
+        'question before changing files. You cannot run the program. To compile, use ' +
+        'check_build: it builds the work branch on GitHub (a few minutes) and returns the ' +
+        'compiler errors. When you finish a set of changes to compiled code, say in a few words ' +
+        'that you are building, call check_build, fix any errors and check again (up to three ' +
+        'rounds) before telling the user it is done; say whether it built. If check_build says ' +
+        'no build is set up, be extra careful with syntax, includes and declarations, and tell ' +
+        'the user to build it themselves. Keep each ' +
         'file\'s existing line endings and indentation. Use JavaScript for standalone snippets ' +
         'unless the user names another language or the repo clearly uses one.';
     }
@@ -1233,6 +1238,11 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
           message: str('Commit message.'),
         }, required: ['path', 'message'] },
       },
+      {
+        name: 'check_build',
+        description: 'Compile the latest commit on the work branch (GitHub Actions) and wait for the result: passed or failed, with compiler errors and warnings. Takes a few minutes. Call it after a set of changes, not after every edit.',
+        input_schema: { type: 'object', properties: {}, required: [] },
+      },
     ].map((t) => ({ ...t, eager_input_streaming: true }));   // big file contents stream as they're written
 
     // Run one tool call. Returns { result: tool_result block, wrote: bool }.
@@ -1255,6 +1265,36 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         addLine('tool', '⚠️ ' + call.name + ': ' + e.message);
         return fail(e.message);
       }
+    }
+
+    // Builds: the repo's workflow compiles each push to the work branch and
+    // writes status.json to "<branch>-builds"; check_build waits for it.
+    const BUILD_WORKFLOW = '.github/workflows/pace-build.yml';
+    const BUILD_POLL_MS = 10000;
+    const BUILD_WAIT_MS = 12 * 60 * 1000;
+
+    function sleep(ms, signal) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, ms);
+        signal.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason || new Error('Aborted')); }, { once: true });
+      });
+    }
+
+    function buildReport(s, short) {
+      const list = (items) => items.map((x) => '  ' + x).join('\n');
+      if (s.result === 'passed') {
+        addLine('tool', '✅ Build passed (' + short + ')' + (s.warningCount ? ', ' + s.warningCount + ' warnings' : ''));
+        return { text: 'Build PASSED for commit ' + short + ' (Debug x64).' +
+          (s.warningCount ? ' ' + s.warningCount + ' warnings:\n' + list(s.warnings || []) : ' No warnings.') };
+      }
+      if (s.result === 'failed') {
+        addLine('tool', '❌ Build failed (' + short + '): ' + s.errorCount + ' error' + (s.errorCount === 1 ? '' : 's'));
+        return { text: 'Build FAILED for commit ' + short + '. ' + s.errorCount + ' errors' +
+          (s.errorCount > (s.errors || []).length ? ' (first ' + s.errors.length + ' shown)' : '') + ':\n' +
+          list(s.errors || []) + '\nFix them, then call check_build again. Full log: ' + s.url };
+      }
+      addLine('tool', '⚠️ Build could not run (' + short + ')');
+      return { text: 'The build could not run: ' + (s.errors || []).join(' ') + ' This is a setup problem for the user, not a code error. Full log: ' + s.url };
     }
 
     const encodePath = (p) => p.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
@@ -1427,6 +1467,29 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         const commit = data.commit.sha.slice(0, 7);
         addLine('tool', '🗑️ Deleted ' + input.path + ' (' + commit + ')');
         return { text: 'Deleted ' + input.path + '. Commit ' + commit + ' on ' + gh.branch + '.', wrote: true };
+      },
+
+      async check_build(input, signal) {
+        const b = await getBranchState(signal);
+        if (!b.exists) return { text: 'Nothing to build yet: branch ' + gh.branch + ' does not exist because no changes have been made.' };
+        if (!(await getFile(BUILD_WORKFLOW, gh.branch, signal, true))) {
+          return { text: 'No build is set up for this repo (' + BUILD_WORKFLOW + ' is missing on ' + gh.branch + '), so the code cannot be compiled here.' };
+        }
+        const head = await ghFetch('/git/ref/heads/' + encodePath(gh.branch), null, signal);
+        const sha = head.object.sha, short = sha.slice(0, 7);
+        addLine('tool', '🔨 Building ' + gh.branch + ' (' + short + ')…');
+        const deadline = Date.now() + BUILD_WAIT_MS;
+        for (;;) {
+          const f = await getFile('status.json', gh.branch + '-builds', signal, true);
+          let s = null;
+          if (f && f.text) { try { s = JSON.parse(f.text.replace(/^\uFEFF/, '')); } catch { s = null; } }
+          if (s && s.sha === sha) return buildReport(s, short);
+          if (Date.now() > deadline) {
+            addLine('tool', '⏳ Build still not finished (' + short + ')');
+            return { text: 'The build of ' + short + ' had not finished after 12 minutes. Tell the user to check the Actions tab: https://github.com/' + gh.repo + '/actions' };
+          }
+          await sleep(BUILD_POLL_MS, signal);
+        }
       },
     };
 
