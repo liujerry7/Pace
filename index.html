@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <!-- Lockdown: no outside scripts, styles or images, and the page can only talk to
        Anthropic and GitHub, so nothing can ship your keys anywhere else. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.anthropic.com https://api.github.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.anthropic.com https://api.github.com; worker-src blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#14130e" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f6f1de" media="(prefers-color-scheme: light)">
@@ -436,6 +436,30 @@
     .chat-open:hover { background: var(--border); }
     .chat-title { max-width: 100%; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .chat-meta { font-size: 13px; color: var(--muted); }
+    .file-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .file-chip {
+      padding: 8px 12px;
+      font: 13.5px/1.3 var(--mono);
+      color: var(--text);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .file-chip[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+    #fileView { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+    #fileView[hidden] { display: none; }
+    .file-code {
+      max-height: 50dvh;
+      margin: 0;
+      padding: 12px 14px;
+      overflow: auto;
+      font: 12.5px/1.5 var(--mono);
+      color: var(--code-text);
+      background: var(--code-bg);
+      border-radius: 12px;
+      white-space: pre;
+    }
+    .file-preview { width: 100%; height: 60dvh; background: #fff; border: 1px solid var(--border); border-radius: 12px; }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .link { background: none; border: none; color: var(--muted); font-size: 13.5px; text-decoration: underline; }
   </style>
@@ -446,6 +470,9 @@
       <div class="brand"><span class="dot"></span>Pace</div>
       <div class="top-actions">
         <button id="modeBtn" class="pill" type="button">Hands-free</button>
+        <button id="filesBtn" class="icon-btn" type="button" aria-label="Files">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        </button>
         <button id="historyBtn" class="icon-btn" type="button" aria-label="Chat history">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
         </button>
@@ -460,7 +487,7 @@
     <main id="scroller">
       <div class="empty">
         <h2>What are we building?</h2>
-        <p>Tap the mic and talk. Claude answers out loud, and with a repo connected in Settings, it writes the code too.</p>
+        <p>Tap the mic and talk. Claude answers out loud and builds what you ask for: in files kept in this browser (the folder icon above), or in your GitHub repo once one is connected in Settings.</p>
       </div>
       <!-- Finished lines (yours and Claude's) get added here -->
       <ol id="transcript"></ol>
@@ -597,6 +624,35 @@
     </form>
   </dialog>
 
+  <!-- Files Claude made when no repo is connected (kept in this browser) -->
+  <dialog id="filesDialog" aria-labelledby="filesTitle">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2 id="filesTitle" tabindex="-1" autofocus style="outline: none">Files</h2>
+        <button id="closeFiles" class="icon-btn" type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <p id="filesRepoNote" class="hint" hidden>A repo is connected, so Claude is working in GitHub. These files stay in this browser.</p>
+        <p id="filesEmpty" class="hint">No files yet. Without a repo connected, ask for something like “make a snake game” and Claude builds it here.</p>
+        <div id="fileList" class="file-list"></div>
+        <div id="fileView" hidden>
+          <div class="row">
+            <button id="previewBtn" class="btn" type="button">Preview</button>
+            <button id="downloadFile" class="btn" type="button">Download</button>
+          </div>
+          <pre id="fileCode" class="file-code"></pre>
+          <!-- No allow-same-origin: a previewed page can't reach Pace's storage or your keys. -->
+          <iframe id="preview" class="file-preview" sandbox="allow-scripts allow-modals" title="Preview" hidden></iframe>
+        </div>
+      </div>
+      <div class="sheet-foot">
+        <button id="clearFiles" class="btn danger" type="button">Delete all files</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- Saved chats -->
   <dialog id="historyDialog" aria-labelledby="historyTitle">
     <div class="sheet">
@@ -703,6 +759,8 @@
     ].join(',');
     const MAX_TOOL_ROUNDS = 60;       // safety stop for one spoken request
     const MAX_FILE_CHARS = 300000;    // longest file handed to Claude in one read
+    const ENABLE_WEB_SEARCH = true;   // Claude may search the web ($10 per 1,000 searches, 5 per step at most)
+    const RUN_TIMEOUT_MS = 5000;      // run_javascript is stopped after this long
     const DEFAULT_BRANCH = 'pace';    // work branch when none is set
     const AUTO_LOCK_MS = 15 * 60 * 1000;   // with a passcode, lock after this long in the background
     const MIN_PASSCODE = 6;
@@ -767,6 +825,27 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         'file\'s existing line endings and indentation. Use JavaScript for standalone snippets ' +
         'unless the user names another language or the repo clearly uses one.';
     }
+
+    // Without a repo, Claude works on files kept in this browser.
+    const LOCAL_PROMPT =
+      '\n\nYou have a small workspace of files kept in the user\'s browser, with tools to list, read, ' +
+      'edit, write and delete them. When the user asks you to build or change something, do the work with ' +
+      'the tools instead of describing it. Before your first tool call in a reply, say one short sentence ' +
+      'about what you are about to do. Read a file before editing it unless you just wrote it. Prefer ' +
+      'edit_file for changes to existing files. For web pages and games, write one self-contained HTML file ' +
+      'with the CSS and JavaScript inline: the user opens it with the Preview button in the Files panel ' +
+      '(folder icon at the top), where it runs with no network access. Do not paste file contents into ' +
+      'your reply: the user can see the files. When you are done, say in a sentence or two what you made ' +
+      'and how to try it. If a request is ambiguous in a way that changes what you would build, ask one ' +
+      'short question first.';
+
+    // Tools available in both modes.
+    const EXTRAS_PROMPT =
+      '\n\nrun_javascript runs standalone JavaScript in a sandboxed Web Worker (no DOM, no import ' +
+      'statements, no network) and returns its console output, return value and errors. Use it to check ' +
+      'logic you wrote, test a function, or work something out exactly, then fix what fails. It cannot run ' +
+      'the user\'s project.' + (ENABLE_WEB_SEARCH
+        ? ' You can search the web for documentation or current facts; do it only when it matters.' : '');
 
     // Saying one of these (on its own) ends a hands-free conversation.
     const STOP_PHRASES = /^(stop|stop listening|end conversation|goodbye|good bye|bye)[.!]?$/i;
@@ -1109,7 +1188,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         model: MODEL,
         max_tokens: 64000,
         stream: true,
-        system: BASE_PROMPT + (codingOn() ? codingPrompt(gh.repo, gh.branch) : '') +
+        system: BASE_PROMPT + (codingOn() ? codingPrompt(gh.repo, gh.branch) : LOCAL_PROMPT) + EXTRAS_PROMPT +
           (conventionsText() ? conventionsPrompt(conventionsText()) : ''),
         // Reasoning stays hidden; short progress notes between tool calls come back as text.
         thinking: { type: 'adaptive', display: 'updates' },
@@ -1118,7 +1197,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         cache_control: { type: 'ephemeral' },   // re-reading the conversation each step is cheap
         messages: history,
       };
-      if (codingOn()) body.tools = TOOL_DEFS;
+      body.tools = currentTools();
       return body;
     }
 
@@ -1152,7 +1231,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
             break;
           case 'content_block_start': {
             const b = { ...ev.content_block };
-            if (b.type === 'tool_use') { b.input = {}; b._json = ''; }
+            if (b.type === 'tool_use' || b.type === 'server_tool_use') { b.input = {}; b._json = ''; }
             blocks[ev.index] = b;
             on.blockStart(b);
             break;
@@ -1169,10 +1248,14 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
           }
           case 'content_block_stop': {
             const b = blocks[ev.index];
-            if (b && b.type === 'tool_use') {
+            if (b && (b.type === 'tool_use' || b.type === 'server_tool_use')) {
               try { b.input = b._json ? JSON.parse(b._json) : {}; }
               catch { b.input = {}; badJson.add(b.id); }
               delete b._json;
+            }
+            if (b && b.type === 'server_tool_use' && b.name === 'web_search') {
+              on.blockStart(b);   // close the current line before the search note
+              addLine('tool', '🔎 Searched the web: ' + (b.input.query || ''));
             }
             break;
           }
@@ -1281,13 +1364,16 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
           history.push({ role: 'assistant', content });
           answered = true;
 
+          // A long web search was paused by the server; sending again resumes it.
+          if (msg.stop_reason === 'pause_turn') continue;
+
           const calls = content.filter((b) => b.type === 'tool_use');
           if (!calls.length) {
             if (msg.stop_reason === 'max_tokens') addLine('info', '(The reply hit the length limit and was cut off.)');
             return;
           }
 
-          showStatus('Working in ' + gh.repo + '…');
+          showStatus(codingOn() ? 'Working in ' + gh.repo + '…' : 'Working…');
           const results = [];
           for (const call of calls) {
             const truncated = msg.stop_reason === 'max_tokens' && call === calls[calls.length - 1];
@@ -1425,12 +1511,67 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       },
     ].map((t) => ({ ...t, eager_input_streaming: true }));   // big file contents stream as they're written
 
+    // Same tool names when no repo is connected, working on files kept in this browser.
+    const LOCAL_TOOL_DEFS = [
+      {
+        name: 'list_files',
+        description: 'List the files in the workspace (kept in the user\'s browser) with their length in lines. Optionally only under one folder.',
+        input_schema: { type: 'object', properties: { path: str('Folder to list, e.g. "games". Omit for everything.') }, required: [] },
+      },
+      {
+        name: 'read_file',
+        description: 'Read the full text of one workspace file.',
+        input_schema: { type: 'object', properties: { path: str('File path, e.g. "snake.html" or "games/snake.html".') }, required: ['path'] },
+      },
+      {
+        name: 'edit_file',
+        description: 'Replace one exact piece of text in an existing workspace file. old_text must match the file exactly (including whitespace) and appear exactly once; include a few surrounding lines to make it unique. Read the file first.',
+        input_schema: { type: 'object', properties: {
+          path: str('File path.'),
+          old_text: str('The exact text to replace.'),
+          new_text: str('The text to put in its place.'),
+        }, required: ['path', 'old_text', 'new_text'] },
+      },
+      {
+        name: 'write_file',
+        description: 'Create a workspace file, or replace a file\'s entire contents.',
+        input_schema: { type: 'object', properties: {
+          path: str('File path.'),
+          content: str('The complete new file contents.'),
+        }, required: ['path', 'content'] },
+      },
+      {
+        name: 'delete_file',
+        description: 'Delete a workspace file.',
+        input_schema: { type: 'object', properties: { path: str('File path.') }, required: ['path'] },
+      },
+    ].map((t) => ({ ...t, eager_input_streaming: true }));
+
+    // Available in both modes.
+    const RUN_JS_DEF = {
+      name: 'run_javascript',
+      description: 'Run JavaScript in a sandboxed Web Worker and get back its console output, return value and any error. ' +
+        'No DOM, no import/export statements, no network. Top-level await works; use `return` to send back a value. ' +
+        'Stopped after ' + RUN_TIMEOUT_MS / 1000 + ' seconds. Without a repo connected, a read-only object `files` maps ' +
+        'each workspace path to its text.',
+      input_schema: { type: 'object', properties: { code: str('The JavaScript to run.') }, required: ['code'] },
+      eager_input_streaming: true,
+    };
+    // Server tool: Anthropic runs the search and the results come back inside Claude's reply.
+    const WEB_SEARCH_DEF = { type: 'web_search_20260209', name: 'web_search', max_uses: 5 };
+
+    // The tools sent with each request. They change only when a repo is connected
+    // or disconnected (changing tools mid-conversation discards earlier thinking).
+    function currentTools() {
+      return [...(codingOn() ? TOOL_DEFS : LOCAL_TOOL_DEFS), RUN_JS_DEF, ...(ENABLE_WEB_SEARCH ? [WEB_SEARCH_DEF] : [])];
+    }
+
     // Run one tool call. Returns { result: tool_result block, wrote: bool }.
     async function runTool(call, flags, signal) {
       const fail = (message) => ({ result: { type: 'tool_result', tool_use_id: call.id, is_error: true, content: message } });
       if (flags.truncated) return fail('Your reply hit the output length limit before this call was complete, so it did not run. Send it again, in smaller pieces if the file is large (several edit_file calls).');
       if (flags.badJson) return fail('INVALID_JSON: this tool input was not valid JSON, so it did not run. Send the call again.');
-      const def = TOOL_DEFS.find((t) => t.name === call.name);
+      const def = currentTools().find((t) => t.name === call.name && t.input_schema);
       if (!def) return fail('Unknown tool: ' + call.name);
       const input = call.input || {};
       for (const key of def.input_schema.required) {
@@ -1438,7 +1579,9 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       }
       if (input.path !== undefined && typeof input.path !== 'string') return fail('"path" must be a string.');
       try {
-        const out = await TOOL_RUNNERS[call.name](input, signal);
+        const runners = call.name === 'run_javascript' ? { run_javascript: runJavaScriptTool }
+          : codingOn() ? TOOL_RUNNERS : LOCAL_RUNNERS;
+        const out = await runners[call.name](input, signal);
         return { result: { type: 'tool_result', tool_use_id: call.id, content: out.text }, wrote: !!out.wrote };
       } catch (e) {
         if (signal.aborted) throw e;
@@ -1672,6 +1815,214 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         }
       },
     };
+
+    // =====================================================================
+    // Local workspace: Claude's files when no repo is connected, saved in this
+    // browser as { path: text } and shown in the Files panel.
+    // =====================================================================
+    const workspace = (() => {
+      try {
+        const saved = JSON.parse(store.get('pace-files') || '{}');
+        return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+      } catch { return {}; }
+    })();
+    const hasFile = (p) => Object.prototype.hasOwnProperty.call(workspace, p);
+    const linesLabel = (s) => { const n = s === '' ? 0 : s.split('\n').length; return n + (n === 1 ? ' line' : ' lines'); };
+
+    function saveWorkspace() {
+      store.set('pace-files', JSON.stringify(workspace));
+      renderFiles();
+    }
+
+    // "./games//snake.html" -> "games/snake.html"; throws on anything odd.
+    function cleanPath(p) {
+      const path = String(p || '').trim().replace(/\\/g, '/').replace(/^(\.\/|\/)+/, '').replace(/\/+/g, '/');
+      const bad = !path || path.length > 200 || !/^[\w .\-/]+$/.test(path) ||
+        path.split('/').some((seg) => seg === '' || seg === '.' || seg === '..' || seg === '__proto__');
+      if (bad) throw new Error('"' + p + '" is not a valid path. Use letters, numbers, spaces, - _ . and /.');
+      return path;
+    }
+    function needFile(path) {
+      if (!hasFile(path)) throw new Error(path + ' does not exist. Use list_files to see the files.');
+    }
+
+    const LOCAL_RUNNERS = {
+      async list_files(input) {
+        const dir = (input.path || '').replace(/^\/+|\/+$/g, '');
+        const paths = Object.keys(workspace).sort().filter((p) => !dir || p === dir || p.startsWith(dir + '/'));
+        addLine('tool', '📂 Listed ' + (dir || 'files') + ' (' + paths.length + ')');
+        return { text: paths.map((p) => p + ' (' + linesLabel(workspace[p]) + ')').join('\n') || '(no files yet)' };
+      },
+      async read_file(input) {
+        const path = cleanPath(input.path);
+        needFile(path);
+        addLine('tool', '📄 Read ' + path);
+        let text = workspace[path];
+        if (text.length > MAX_FILE_CHARS) text = text.slice(0, MAX_FILE_CHARS) + '\n…[file cut off after ' + MAX_FILE_CHARS + ' characters]';
+        return { text: text || '(empty file)' };
+      },
+      async edit_file(input) {
+        const path = cleanPath(input.path);
+        needFile(path);
+        const text = workspace[path], oldText = input.old_text;
+        if (!oldText) throw new Error('old_text is empty. Use write_file to replace a whole file.');
+        const count = text.split(oldText).length - 1;
+        if (count === 0) throw new Error('old_text was not found in ' + path + '. Read the file again and copy the text exactly.');
+        if (count > 1) throw new Error('old_text appears ' + count + ' times in ' + path + '. Include more surrounding lines so it matches once.');
+        const i = text.indexOf(oldText);
+        workspace[path] = text.slice(0, i) + input.new_text + text.slice(i + oldText.length);
+        saveWorkspace();
+        addLine('tool', '✏️ Edited ' + path);
+        return { text: 'Edited ' + path + '.' };
+      },
+      async write_file(input) {
+        const path = cleanPath(input.path);
+        const existed = hasFile(path);
+        workspace[path] = input.content;
+        saveWorkspace();
+        addLine('tool', (existed ? '💾 Rewrote ' : '🆕 Created ') + path + ' (' + linesLabel(input.content) + ')');
+        return { text: (existed ? 'Replaced ' : 'Created ') + path + ' (' + linesLabel(input.content) + ').' };
+      },
+      async delete_file(input) {
+        const path = cleanPath(input.path);
+        needFile(path);
+        delete workspace[path];
+        saveWorkspace();
+        addLine('tool', '🗑️ Deleted ' + path);
+        return { text: 'Deleted ' + path + '.' };
+      },
+    };
+
+    // =====================================================================
+    // run_javascript: Claude's code runs in a Web Worker built from a blob.
+    // It has its own thread (so an endless loop can be killed), no access to
+    // this page, its DOM or its storage (where your keys are), and it inherits
+    // the page's Content Security Policy. The code is placed in the worker's
+    // source rather than eval'd, so the page never needs 'unsafe-eval'.
+    // =====================================================================
+    const WORKER_HEAD = `
+      const show = (v) => {
+        if (typeof v === 'string') return v;
+        if (v instanceof Error) return v.stack || String(v);
+        try { const j = JSON.stringify(v, null, 2); return j === undefined ? String(v) : j; } catch { return String(v); }
+      };
+      for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
+        console[level] = (...args) => postMessage({ type: 'log', level, text: args.map(show).join(' ') });
+      }
+      self.onmessage = async (event) => {
+        try {
+          const result = await (async (files) => {
+`;
+    const WORKER_TAIL = `
+          })(Object.freeze(event.data.files || {}));
+          postMessage({ type: 'done', result: result === undefined ? undefined : show(result) });
+        } catch (err) {
+          postMessage({ type: 'done', error: show(err) });
+        }
+      };
+`;
+
+    function runInWorker(code, signal) {
+      return new Promise((resolve) => {
+        const url = URL.createObjectURL(new Blob([WORKER_HEAD, code, WORKER_TAIL], { type: 'text/javascript' }));
+        const out = [];
+        let finished = false, worker = null;
+        const finish = (last) => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          if (worker) worker.terminate();
+          URL.revokeObjectURL(url);
+          if (last) out.push(last);
+          resolve(out.join('\n') || '(no output)');
+        };
+        const timer = setTimeout(() => finish('Stopped: still running after ' + RUN_TIMEOUT_MS / 1000 + ' seconds.'), RUN_TIMEOUT_MS);
+        signal.addEventListener('abort', () => finish('Interrupted.'), { once: true });
+        try { worker = new Worker(url); }
+        catch (e) { finish('Error: could not start the sandbox (' + e.message + ').'); return; }
+        worker.onmessage = (e) => {
+          const m = e.data || {};
+          if (m.type === 'log') out.push((m.level === 'log' || m.level === 'info' ? '' : m.level + ': ') + m.text);
+          if (m.type === 'done') {
+            const last = m.error ? 'Error: ' + m.error : m.result !== undefined ? 'Returned: ' + m.result : '';
+            setTimeout(() => finish(last), 200);   // let a quick setTimeout log land first
+          }
+        };
+        // Syntax errors and uncaught async errors land here.
+        worker.onerror = (e) => { e.preventDefault(); finish('Error: ' + (e.message || 'the code failed to run')); };
+        worker.postMessage({ files: codingOn() ? {} : { ...workspace } });
+      });
+    }
+
+    async function runJavaScriptTool(input, signal) {
+      const output = await runInWorker(input.code, signal);
+      if (signal.aborted) throw new Error('Interrupted');
+      const shown = output.length > 1500 ? output.slice(0, 1500) + '\n…' : output;
+      addLine('tool', '▶️ Ran JavaScript\n```\n' + shown + '\n```');
+      return { text: output.length > 30000 ? output.slice(0, 30000) + '\n…(output cut off)' : output };
+    }
+
+    // =====================================================================
+    // Files panel (folder icon): view, preview and download workspace files
+    // =====================================================================
+    const filesEl = $('filesDialog'), fileListEl = $('fileList'), fileViewEl = $('fileView');
+    const fileCodeEl = $('fileCode'), previewEl = $('preview'), previewBtn = $('previewBtn');
+    let openPath = null;
+
+    function renderFiles() {
+      const paths = Object.keys(workspace).sort();
+      if (openPath && !hasFile(openPath)) openPath = null;
+      $('filesEmpty').hidden = paths.length > 0;
+      $('filesRepoNote').hidden = !codingOn();
+      $('clearFiles').hidden = paths.length === 0;
+      fileListEl.replaceChildren(...paths.map((p) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'file-chip';
+        b.textContent = p;
+        b.setAttribute('aria-pressed', String(p === openPath));
+        b.addEventListener('click', () => openFile(p === openPath ? null : p));
+        return b;
+      }));
+      fileViewEl.hidden = !openPath;
+      if (!openPath) return;
+      fileCodeEl.textContent = workspace[openPath];
+      previewBtn.hidden = !/\.html?$/i.test(openPath);
+      // Keep an open preview in step when Claude changes the file.
+      if (!previewEl.hidden && previewEl.srcdoc !== workspace[openPath]) previewEl.srcdoc = workspace[openPath];
+    }
+
+    function showPreview(on) {
+      previewEl.hidden = !on;
+      fileCodeEl.hidden = on;
+      previewBtn.textContent = on ? 'Code' : 'Preview';
+      if (on) previewEl.srcdoc = workspace[openPath]; else previewEl.removeAttribute('srcdoc');
+    }
+
+    function openFile(p) {
+      openPath = p;
+      showPreview(false);
+      renderFiles();
+    }
+
+    $('filesBtn').addEventListener('click', () => { if (!isLocked()) { renderFiles(); filesEl.showModal(); } });
+    $('closeFiles').addEventListener('click', () => filesEl.close());
+    filesEl.addEventListener('close', () => showPreview(false));   // stop a running game
+    previewBtn.addEventListener('click', () => { if (openPath) showPreview(previewEl.hidden); });
+    $('downloadFile').addEventListener('click', () => {
+      if (!openPath) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([workspace[openPath]], { type: 'text/plain' }));
+      a.download = openPath.split('/').pop();
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+    $('clearFiles').addEventListener('click', () => {
+      if (!confirm('Delete all ' + Object.keys(workspace).length + ' files in this browser? This can’t be undone.')) return;
+      Object.keys(workspace).forEach((p) => delete workspace[p]);
+      openPath = null;
+      saveWorkspace();
+    });
 
     // =====================================================================
     // Speech recognition

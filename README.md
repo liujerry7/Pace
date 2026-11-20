@@ -1,6 +1,6 @@
 # Pace — voice coding
 
-Talk to Claude out loud, and have it change code in your GitHub repo. Single `index.html`, no build step, no dependencies. Works in Chrome (desktop or Android).
+Talk to Claude out loud and have it build things: in files kept in your browser, or as commits to your GitHub repo. It can run JavaScript to check its work and search the web. Single `index.html`, no build step, no dependencies. Works in Chrome (desktop or Android).
 
 ## Use it
 1. Open the page (GitHub Pages URL on a phone; HTTPS is required for the microphone).
@@ -18,6 +18,16 @@ Code in replies is shown on screen but not read aloud. **Clear** also starts a f
 
 **Mic trouble:** under the mic button, Pace shows "Starting the mic…", then "Go ahead, I'm listening…" once it actually hears audio, and "Hearing you…" when you speak. If the mic never starts, or hears nothing twice in a row, it says so. On iPhone, use Safari.
 
+## Building without a repo
+With no repo connected, Claude works on a small set of files kept in this browser. Ask for something like "make a snake game" or "write a palindrome checker and test it". The transcript shows each step, and the **folder icon** at the top opens the files. HTML files have **Preview**, which runs the page inside Pace in a sandbox with no network access. Every file has **Download**.
+
+The files stay in this browser across reloads and chats, until you tap **Delete all files**. They aren't encrypted by the passcode, so don't keep secrets in them.
+
+## Running code and web search
+These work with or without a repo:
+- **run_javascript**: Claude runs standalone JavaScript in a Web Worker and gets back the console output, return value and errors. It uses this to test logic and fix what fails before telling you it's done. The worker has no DOM and no access to Pace or your keys. It inherits Pace's network rules, so it can't reach other sites, and it is stopped after 5 seconds. It can't run your repo's program; use `check_build` for that.
+- **Web search**: Claude can look up docs or current facts. Searches cost $10 per 1,000, with at most 5 per step. To turn web search off, set `ENABLE_WEB_SEARCH = false` near the top of the script in `index.html`.
+
 ## Install it like an app
 - **iPhone:** open the site in Safari → Share → **Add to Home Screen**. It gets the Pace icon and opens full screen.
 - **Android / desktop Chrome:** menu → **Install app** (or "Add to Home screen").
@@ -31,7 +41,8 @@ Each install keeps its own saved keys. To copy your setup instead of pasting key
 The page itself is public (GitHub Pages can't password-protect a site on a personal account), but it's useless to anyone else: your API key and GitHub token live only in your own browser, so visitors would have to bring their own. It's also marked `noindex` so search engines skip it.
 
 Built-in protections, with or without a passcode:
-- The page loads nothing from other sites, and a Content Security Policy only lets it talk to `api.anthropic.com` and `api.github.com`, so even injected code couldn't send your keys anywhere else.
+- The page loads nothing from other sites, and a Content Security Policy only lets it talk to `api.anthropic.com` and `api.github.com`, so even injected code couldn't send your keys anywhere else. The only addition for running code is `worker-src blob:`, and Claude's code is placed in the worker's source, so the page never needs `unsafe-eval`.
+- Code Claude runs (Web Worker) and pages it previews (sandboxed frame without `allow-same-origin`) can't read Pace's storage, where your keys are.
 - Claude's replies are drawn as plain text, never as HTML.
 - Claude never sees your keys; it only asks Pace to run tools.
 - Saved keys are never shown again in Settings (only their last 4 characters).
