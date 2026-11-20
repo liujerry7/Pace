@@ -16,7 +16,10 @@ Code in replies is shown on screen but not read aloud. **Clear** also starts a f
 - **iPhone:** open the site in Safari → Share → **Add to Home Screen**. It gets the Pace icon and opens full screen.
 - **Android / desktop Chrome:** menu → **Install app** (or "Add to Home screen").
 
-Each install keeps its own saved keys, so paste your key once more inside the installed app.
+Each install keeps its own saved keys. To copy your setup instead of pasting keys again: on the device that's set up, open ⚙️ Settings → **Send to another device**. Scan the QR code with the other device's camera, open the link, type the 10-character code shown next to the QR, and tap **Set up this device**.
+- The link carries your keys and settings encrypted with that code (AES-256, PBKDF2). It works for 30 minutes, and the encrypted part sits after `#`, which browsers never send to any server.
+- On iPhone the link opens in Safari, but a Home Screen app keeps its own storage. Tap **Copy link** on the setup screen, open the Home Screen app, and paste it under ⚙️ Settings → **Set up from another device**.
+- Custom coding conventions longer than a QR code can hold are left out; copy those by hand.
 
 ## Keeping it yours
 The page itself is public (GitHub Pages can't password-protect a site on a personal account), but it's useless to anyone else: your API key and GitHub token live only in your own browser, so visitors would have to bring their own. It's also marked `noindex` so search engines skip it.
