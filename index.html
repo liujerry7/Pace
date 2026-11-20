@@ -346,6 +346,7 @@
     .sheet-body section:first-child { border-top: none; padding-top: 6px; }
     .sheet-body h3 { margin: 0; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
     .sheet-body h3 .opt { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--faint); }
+    .field label .opt { font-weight: 500; color: var(--faint); }
     .field label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 600; }
     .hint { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
     .field input, .field select {
@@ -538,6 +539,15 @@
               <option value="xhigh">Extra high: hardest coding (slow)</option>
             </select>
           </div>
+          <div class="field">
+            <label for="langInput">Language for new code</label>
+            <select id="langInput">
+              <option value="auto">Auto: the repo's language, else JavaScript</option>
+              <option value="cpp">C++</option>
+              <option value="js">JavaScript</option>
+              <option value="python">Python</option>
+            </select>
+          </div>
         </section>
 
         <section>
@@ -579,6 +589,23 @@
         </section>
 
         <section>
+          <h3>Lifeline <span class="opt">· optional</span></h3>
+          <p class="hint">Lets Claude check your schedule, projects and to-dos, and log time, through Lifeline's MCP
+            server. Anthropic's servers make the calls, so the server must be reachable over the internet (HTTPS).
+            The token is sent only to api.anthropic.com, which passes it to that server.</p>
+          <div class="field">
+            <label for="llUrlInput">Server URL</label>
+            <input id="llUrlInput" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://…/mcp">
+          </div>
+          <div class="field">
+            <label for="llTokenInput">Token <span class="opt">· if the server needs one</span></label>
+            <input id="llTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="Bearer token">
+          </div>
+          <label class="check"><input id="llWritesInput" type="checkbox">
+            <span>Let Claude add and update things (log time, tick to-dos, create events). It asks you out loud first. Deleting and archiving are never allowed.</span></label>
+        </section>
+
+        <section>
           <h3>Coding conventions</h3>
           <p class="hint">Claude follows these in code it writes and suggests them when you ask for something that
             breaks them. A repo's own CLAUDE.md, CONVENTIONS.md or .clang-format wins. Copied from your Lifeline docs.</p>
@@ -591,7 +618,7 @@
 
         <section>
           <h3>Passcode lock <span class="opt">· optional</span></h3>
-          <p class="hint" id="lockHint">Encrypts your saved key and token in this browser. Pace asks for the passcode when
+          <p class="hint" id="lockHint">Encrypts your saved key and tokens in this browser. Pace asks for the passcode when
             it opens, and again after 15 minutes in the background. Use 6+ characters; a few words is strongest.
             There's no recovery: if you forget it, erase and paste your keys again.</p>
           <div class="field">
@@ -822,8 +849,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         'rounds) before telling the user it is done; say whether it built. If check_build says ' +
         'no build is set up, be extra careful with syntax, includes and declarations, and tell ' +
         'the user to build it themselves. Keep each ' +
-        'file\'s existing line endings and indentation. Use JavaScript for standalone snippets ' +
-        'unless the user names another language or the repo clearly uses one.';
+        'file\'s existing line endings and indentation.';
     }
 
     // Without a repo, Claude works on files kept in this browser.
@@ -838,6 +864,66 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       'your reply: the user can see the files. When you are done, say in a sentence or two what you made ' +
       'and how to try it. If a request is ambiguous in a way that changes what you would build, ask one ' +
       'short question first.';
+
+    // Dictating code by voice. Speech recognition turns symbols into words and
+    // mishears keywords, so Claude is told how to read them back as code.
+    const SPOKEN_CODE_PROMPT =
+      '\n\nThe user may dictate code word by word. Turn spoken symbols into code: "colon colon" or "scope" ' +
+      'is ::, "arrow" is ->, "dot" is ., "star" or "pointer to" is *, "ampersand" or "reference to" is &, ' +
+      '"double ampersand" or "and and" is &&, "pipe pipe" or "or or" is ||, "bang" or "not" is !, ' +
+      '"equals equals" is ==, "not equals" is !=, "plus plus" is ++, "plus equals" is +=, "hash" or "pound" ' +
+      'is #, "open paren"/"close paren", "open brace"/"close brace", "open bracket"/"close bracket" and ' +
+      '"semicolon" are what they say, and "new line" ends a line. Template arguments are often spoken as ' +
+      '"of": "vector of int" is std::vector<int>, "map from string to float" is std::map<std::string, float>, ' +
+      '"unique pointer to Enemy" is std::unique_ptr<Enemy>. Naming: "camel case foo bar" is fooBar, ' +
+      '"pascal case" is FooBar, "snake case" is foo_bar, "all caps" or "constant" is FOO_BAR, and "member" or ' +
+      '"m underscore" adds the m_ prefix. Expect misheard code words and fix them from context: "in" or "and" ' +
+      'for int, "STD" or "standard" for std, "see out"/"see in" for cout/cin, "avoid" for void, "otto" for ' +
+      'auto, "null pointer" for nullptr, "a raise" for array, "cost" or "constant" for const, "static cast" ' +
+      'for static_cast, "include I O stream" for #include <iostream>. When the user dictates a line or a ' +
+      'function, put it into the code you are working on rather than just repeating it, and say back in a few ' +
+      'words what you understood only if a word could reasonably mean two different things.';
+
+    function languagePrompt() {
+      if (codeLang === 'cpp') {
+        return '\n\nWrite new code and dictated snippets in modern C++ (C++20) unless the user names another ' +
+          'language or the repo clearly uses one. C++ cannot be compiled or run in Pace itself (run_javascript ' +
+          'runs only JavaScript), so ' + (codingOn()
+            ? 'use check_build to compile it.'
+            : 'write .cpp and .h files in the workspace, be extra careful with syntax, includes, declarations ' +
+              'and types, and say plainly that the code has not been compiled. You may use run_javascript to ' +
+              'check the logic of an algorithm by porting it, if that helps.');
+      }
+      const name = { js: 'JavaScript', python: 'Python' }[codeLang];
+      return name
+        ? '\n\nWrite new code and dictated snippets in ' + name + ' unless the user names another language or the repo clearly uses one.'
+        : '\n\nUse JavaScript for standalone snippets unless the user names another language or the repo clearly uses one.';
+    }
+
+    // Lifeline (calendar, projects, time log, docs) through the MCP connector.
+    // Reads are always allowed; writes only with the Settings switch; deletes never.
+    const LIFELINE_READ_TOOLS = ['get_overview', 'what_now', 'context_for', 'list_projects', 'list_events',
+      'list_goals', 'list_time_tracked', 'list_ticks', 'list_docs', 'read_doc', 'search_docs', 'list_books',
+      'list_filters', 'list_words', 'read_grammar'];
+    const LIFELINE_WRITE_TOOLS = ['log_time', 'start_clock', 'stop_clock', 'tick', 'log_event', 'create_event',
+      'update_event', 'create_project', 'add_to_project', 'set_project_status', 'set_project_context',
+      'set_project_deadline', 'finish_project', 'create_doc', 'update_doc', 'log_reading_progress',
+      'create_goal', 'set_goal_status'];
+
+    function lifelinePrompt() {
+      const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return ''; } })();
+      return '\n\nYou can use the user\'s Lifeline through the Lifeline tools: their calendar, project tracker, ' +
+        'to-dos, time log and notes. Use it when the user asks about their day, schedule, projects, to-dos, time ' +
+        'or notes. get_overview gives the current time and the projects in progress; what_now suggests what to ' +
+        'do next. Times are ISO 8601 with an offset' + (tz ? ' (the user is in ' + tz + ')' : '') + '. Keep ' +
+        'spoken summaries short: the two or three things that matter, not a full list. ' + (lifeline.writes
+          ? 'Before changing anything in Lifeline (logging time, ticking a to-do, creating or moving an event), ' +
+            'say in one short sentence exactly what you will change and wait for the user to say yes. A clock ' +
+            'never stops by itself: stop any clock you start, by its session id, and never stop a clock you did ' +
+            'not start.'
+          : 'Pace only lets you read Lifeline. If the user asks to change something, say that writing is turned ' +
+            'off in Pace\'s settings.');
+    }
 
     // Tools available in both modes.
     const EXTRAS_PROMPT =
@@ -903,6 +989,14 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     let conventions = store.get('pace-conventions');
     const conventionsText = () => (conventions === null ? DEFAULT_CONVENTIONS : conventions).trim();
     const codingOn = () => !!(gh.repo && gh.token);
+    // Lifeline's MCP server, called by Anthropic's servers through the MCP connector.
+    const lifeline = {
+      url:    store.get('pace-lifeline-url') || '',
+      token:  store.get('pace-lifeline-token') || '',
+      writes: store.get('pace-lifeline-writes') !== '0',
+    };
+    const lifelineOn = () => !!lifeline.url;
+    let codeLang = store.get('pace-lang') || 'auto';   // auto | cpp | js | python
 
     const lines = [];     // plain-text log for "Copy all"
     const log = [];       // what's on screen, for saving and reopening chats
@@ -1189,6 +1283,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         max_tokens: 64000,
         stream: true,
         system: BASE_PROMPT + (codingOn() ? codingPrompt(gh.repo, gh.branch) : LOCAL_PROMPT) + EXTRAS_PROMPT +
+          SPOKEN_CODE_PROMPT + languagePrompt() + (lifelineOn() ? lifelinePrompt() : '') +
           (conventionsText() ? conventionsPrompt(conventionsText()) : ''),
         // Reasoning stays hidden; short progress notes between tool calls come back as text.
         thinking: { type: 'adaptive', display: 'updates' },
@@ -1198,6 +1293,12 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         messages: history,
       };
       body.tools = currentTools();
+      if (lifelineOn()) {
+        body.mcp_servers = [{
+          type: 'url', url: lifeline.url, name: 'lifeline',
+          ...(lifeline.token ? { authorization_token: lifeline.token } : {}),
+        }];
+      }
       return body;
     }
 
@@ -1213,7 +1314,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
           'anthropic-version': API_VERSION,
           // Required for calling the API directly from a web page.
           'anthropic-dangerous-direct-browser-access': 'true',
-          'anthropic-beta': BETAS,
+          'anthropic-beta': BETAS + (lifelineOn() ? ',mcp-client-2025-11-20' : ''),
         },
         body: JSON.stringify(requestBody()),
       });
@@ -1231,7 +1332,12 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
             break;
           case 'content_block_start': {
             const b = { ...ev.content_block };
-            if (b.type === 'tool_use' || b.type === 'server_tool_use') { b.input = {}; b._json = ''; }
+            // Inputs usually stream in as JSON fragments; keep a complete one if it came in the start event.
+            if (b.type === 'tool_use' || b.type === 'server_tool_use' || b.type === 'mcp_tool_use') { b.input = b.input || {}; b._json = ''; }
+            if (b.type === 'mcp_tool_result' && b.is_error) {
+              const why = Array.isArray(b.content) ? b.content.map((c) => c.text || '').join(' ') : String(b.content || '');
+              addLine('tool', '⚠️ Lifeline: ' + (why.slice(0, 200) || 'the call failed'));
+            }
             blocks[ev.index] = b;
             on.blockStart(b);
             break;
@@ -1248,10 +1354,14 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
           }
           case 'content_block_stop': {
             const b = blocks[ev.index];
-            if (b && (b.type === 'tool_use' || b.type === 'server_tool_use')) {
-              try { b.input = b._json ? JSON.parse(b._json) : {}; }
+            if (b && (b.type === 'tool_use' || b.type === 'server_tool_use' || b.type === 'mcp_tool_use')) {
+              try { b.input = b._json ? JSON.parse(b._json) : (b.input || {}); }
               catch { b.input = {}; badJson.add(b.id); }
               delete b._json;
+            }
+            if (b && b.type === 'mcp_tool_use') {
+              on.blockStart(b);
+              addLine('tool', '📅 Lifeline: ' + b.name.replace(/_/g, ' '));
             }
             if (b && b.type === 'server_tool_use' && b.name === 'web_search') {
               on.blockStart(b);   // close the current line before the search note
@@ -1563,7 +1673,17 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     // The tools sent with each request. They change only when a repo is connected
     // or disconnected (changing tools mid-conversation discards earlier thinking).
     function currentTools() {
-      return [...(codingOn() ? TOOL_DEFS : LOCAL_TOOL_DEFS), RUN_JS_DEF, ...(ENABLE_WEB_SEARCH ? [WEB_SEARCH_DEF] : [])];
+      const tools = [...(codingOn() ? TOOL_DEFS : LOCAL_TOOL_DEFS), RUN_JS_DEF, ...(ENABLE_WEB_SEARCH ? [WEB_SEARCH_DEF] : [])];
+      if (lifelineOn()) {
+        // Allowlist: everything off by default, then only the tools named here.
+        const allowed = [...LIFELINE_READ_TOOLS, ...(lifeline.writes ? LIFELINE_WRITE_TOOLS : [])];
+        tools.push({
+          type: 'mcp_toolset', mcp_server_name: 'lifeline',
+          default_config: { enabled: false },
+          configs: Object.fromEntries(allowed.map((name) => [name, { enabled: true }])),
+        });
+      }
+      return tools;
     }
 
     // Run one tool call. Returns { result: tool_result block, wrote: bool }.
@@ -2269,16 +2389,18 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     async function saveSecrets() {
       if (vaultKey) {
         const iv = crypto.getRandomValues(new Uint8Array(12));
-        const plain = new TextEncoder().encode(JSON.stringify({ apiKey, ghToken: gh.token, dataKey: dataKeyRaw }));
+        const plain = new TextEncoder().encode(JSON.stringify({ apiKey, ghToken: gh.token, lifelineToken: lifeline.token, dataKey: dataKeyRaw }));
         const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, vaultKey, plain);
         store.set(VAULT, JSON.stringify({ v: 1, salt: b64e(vaultSalt), iv: b64e(iv), data: b64e(data) }));
         store.del('pace-api-key');
         store.del('pace-gh-token');
+        store.del('pace-lifeline-token');
         store.del('pace-data-key');
       } else {
         store.del(VAULT);
         saveOrDelete('pace-api-key', apiKey);
         saveOrDelete('pace-gh-token', gh.token);
+        saveOrDelete('pace-lifeline-token', lifeline.token);
         saveOrDelete('pace-data-key', dataKeyRaw);
       }
     }
@@ -2294,6 +2416,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       vaultSalt = salt;
       apiKey = s.apiKey || '';
       gh.token = s.ghToken || '';
+      lifeline.token = s.lifelineToken || '';
       dataKeyRaw = s.dataKey || store.get('pace-data-key') || '';
       dataKeyObj = null;
     }
@@ -2312,6 +2435,9 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       saveOrDelete('pace-gh-repo', gh.repo);
       saveOrDelete('pace-gh-branch', gh.branch === DEFAULT_BRANCH ? '' : gh.branch);
       saveOrDelete('pace-gh-allow-default', gh.allowDefault ? '1' : '');
+      saveOrDelete('pace-lifeline-url', lifeline.url);
+      store.set('pace-lifeline-writes', lifeline.writes ? '1' : '0');
+      store.set('pace-lang', codeLang);
       if (conventions === null) store.del('pace-conventions'); else store.set('pace-conventions', conventions);
     }
 
@@ -2329,6 +2455,11 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       ghTokenInput.value = '';
       ghTokenInput.placeholder = savedHint(gh.token, 'github_pat_…');
       $('allowDefaultInput').checked = gh.allowDefault;
+      $('langInput').value = codeLang;
+      $('llUrlInput').value = lifeline.url;
+      $('llTokenInput').value = '';
+      $('llTokenInput').placeholder = savedHint(lifeline.token, 'Bearer token');
+      $('llWritesInput').checked = lifeline.writes;
       fillVoiceSelect();
       $('rateInput').value = speechRate;
       showRate();
@@ -2354,6 +2485,12 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         settingsEl.close();
         return;
       }
+      const llUrl = $('llUrlInput').value.trim();
+      if (llUrl && !/^https:\/\/[^\s/]+/i.test(llUrl)) {
+        showStatus('The Lifeline server URL must start with https://.', true);
+        settingsEl.close();
+        return;
+      }
       const pass = passInput.value;
       if (pass && pass.length < MIN_PASSCODE) {
         passInput.setCustomValidity('Use at least ' + MIN_PASSCODE + ' characters.');
@@ -2364,7 +2501,13 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
 
       apiKey = keyInput.value.trim() || apiKey;
       effort = effortInput.value;
-      const before = gh.repo + '|' + gh.branch + '|' + codingOn();
+      // Anything that changes Claude's tools starts a fresh conversation.
+      const toolsKey = () => [gh.repo, gh.branch, codingOn(), lifeline.url, lifeline.writes].join('|');
+      const before = toolsKey();
+      codeLang = $('langInput').value;
+      lifeline.url = llUrl;
+      lifeline.token = $('llTokenInput').value.trim() || (llUrl ? lifeline.token : '');
+      lifeline.writes = $('llWritesInput').checked;
       gh.repo = repo;
       gh.branch = ghBranchInput.value.trim() || DEFAULT_BRANCH;
       gh.token = ghTokenInput.value.trim() || gh.token;
@@ -2385,11 +2528,11 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       await saveSecrets();
       settingsEl.close();
 
-      // Switching repos (or turning coding on/off) starts a fresh conversation.
-      if (before !== gh.repo + '|' + gh.branch + '|' + codingOn()) {
+      if (before !== toolsKey()) {
         clearConversation();
         branchState = null;
         if (codingOn()) addLine('info', 'Connected to ' + gh.repo + '. Changes go to branch ' + gh.branch + '.');
+        if (lifelineOn()) addLine('info', 'Lifeline connected' + (lifeline.writes ? '.' : ' (read only).'));
       }
       showStatus(
         (!apiKey ? 'Saved. No API key, so Pace will only transcribe.' :
@@ -2448,15 +2591,16 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     });
 
     $('forgetKey').addEventListener('click', () => {
-      apiKey = ''; gh.token = '';
+      apiKey = ''; gh.token = ''; lifeline.token = '';
       vaultKey = null; vaultSalt = null;
       store.del(VAULT);
       store.del('pace-api-key');
       store.del('pace-gh-token');
+      store.del('pace-lifeline-token');
       if (dataKeyRaw) store.set('pace-data-key', dataKeyRaw);   // keep saved chats readable
       settingsEl.close();
       clearConversation();
-      showStatus('API key, GitHub token and passcode removed from this browser.');
+      showStatus('API key, GitHub and Lifeline tokens and passcode removed from this browser.');
     });
 
     // =====================================================================
@@ -2753,7 +2897,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     async function makeSetupLink(code) {
       const setup = {
         v: 1, t: Date.now(), apiKey, ghToken: gh.token, repo: gh.repo, branch: gh.branch,
-        allowDefault: gh.allowDefault, effort, recent: recentRepos(),
+        allowDefault: gh.allowDefault, effort, recent: recentRepos(), lang: codeLang,
+        lifelineUrl: lifeline.url, lifelineToken: lifeline.token, lifelineWrites: lifeline.writes,
       };
       let skippedConventions = false;
       if (conventions !== null) {
@@ -2790,6 +2935,10 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       gh.branch = setup.branch || DEFAULT_BRANCH;
       gh.allowDefault = !!setup.allowDefault;
       effort = setup.effort || effort;
+      codeLang = setup.lang || codeLang;
+      lifeline.url = setup.lifelineUrl || '';
+      lifeline.token = setup.lifelineToken || '';
+      lifeline.writes = setup.lifelineWrites !== false;
       if (typeof setup.conventions === 'string') conventions = setup.conventions;
       saveSettings();
       if (Array.isArray(setup.recent)) store.set('pace-gh-recent', JSON.stringify(setup.recent.slice(0, 8)));
@@ -3116,7 +3265,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       lockReset.addEventListener('click', () => {
         if (!armed) { armed = true; lockReset.textContent = 'Tap again to erase your saved keys and chats'; return; }
         store.del(VAULT);
-        apiKey = ''; gh.token = '';
+        apiKey = ''; gh.token = ''; lifeline.token = '';
         dataKeyRaw = ''; dataKeyObj = null;
         chatStore.clear().catch(() => {});   // they can't be decrypted any more
         ready();

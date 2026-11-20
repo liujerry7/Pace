@@ -1,6 +1,6 @@
 # Pace — voice coding
 
-Talk to Claude out loud and have it build things: in files kept in your browser, or as commits to your GitHub repo. It can run JavaScript to check its work and search the web. Single `index.html`, no build step, no dependencies. Works in Chrome (desktop or Android).
+Talk to Claude out loud and have it build things: in files kept in your browser, or as commits to your GitHub repo. It can run JavaScript to check its work, search the web, and check or update your Lifeline. Single `index.html`, no build step, no dependencies. Works in Chrome (desktop or Android).
 
 ## Use it
 1. Open the page (GitHub Pages URL on a phone; HTTPS is required for the microphone).
@@ -27,6 +27,22 @@ The files stay in this browser across reloads and chats, until you tap **Delete 
 These work with or without a repo:
 - **run_javascript**: Claude runs standalone JavaScript in a Web Worker and gets back the console output, return value and errors. It uses this to test logic and fix what fails before telling you it's done. The worker has no DOM and no access to Pace or your keys. It inherits Pace's network rules, so it can't reach other sites, and it is stopped after 5 seconds. It can't run your repo's program; use `check_build` for that.
 - **Web search**: Claude can look up docs or current facts. Searches cost $10 per 1,000, with at most 5 per step. To turn web search off, set `ENABLE_WEB_SEARCH = false` near the top of the script in `index.html`.
+
+## Dictating code (C++ and others)
+Say code the way you'd read it out: "for int i equals zero, i less than count, i plus plus", "vector of unique pointer to Enemy", "member camel case max speed". Claude turns spoken symbols into code ("colon colon" is `::`, "arrow" is `->`, "ampersand" is `&`) and fixes common mishearings ("in" for `int`, "see out" for `cout`, "otto" for `auto`). It writes the code into the file you're working on, not just into the chat.
+
+**Language for new code** (⚙️ Settings) picks the default: Auto (the repo's language, else JavaScript), C++, JavaScript or Python. With C++:
+- **With a repo connected,** Claude compiles with `check_build` and fixes errors before saying it's done.
+- **Without a repo,** Claude writes `.cpp` and `.h` files in the browser workspace, but Pace can't compile C++ itself, so Claude says the code hasn't been compiled. Download the files and build them yourself, or connect a repo.
+
+## Lifeline
+In ⚙️ Settings → **Lifeline**, paste the URL of Lifeline's MCP server and, if it needs one, a token. Then ask things like "what should I work on next?", "what's on my calendar this afternoon?" or "log an hour on Pace". The transcript shows each Lifeline call (📅).
+
+- **The server must be reachable over the internet** (HTTPS, Streamable HTTP or SSE). Anthropic's servers make the calls through the MCP connector, so a server that only runs on your computer won't work. Servers that sign in with OAuth need you to get an access token first and paste it here. Pace doesn't refresh it, so paste a new one when it expires.
+- **What Claude may do:** read tools (overview, what now, events, projects, goals, time tracked, docs) are always on. **Let Claude add and update things** turns on logging time, clocks, ticking to-dos, creating and updating events, projects and docs. Claude says what it will change and waits for your "yes". Deleting, archiving and rule changes are never enabled.
+- **Privacy:** the token is stored like your other keys (encrypted with the passcode, if you set one) and included in the setup link for another device. It's sent only to api.anthropic.com, which passes it to the Lifeline server.
+
+Changing the repo, Lifeline URL or the write switch starts a new conversation, because Claude's tools change.
 
 ## Install it like an app
 - **iPhone:** open the site in Safari → Share → **Add to Home Screen**. It gets the Pace icon and opens full screen.
