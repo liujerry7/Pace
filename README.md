@@ -10,7 +10,13 @@ Talk to Claude out loud, and have it change code in your GitHub repo. Single `in
 
 Code in replies is shown on screen but not read aloud. **Clear** also starts a fresh conversation.
 
-**Effort** (in Settings) trades speed for depth: Medium is the default; use High or Extra high for heavier coding.
+**Effort** (in Settings) trades speed for depth. **Auto** (the default) uses Low for plain chat, so replies come quickly, and Medium when a repo is connected. Use High or Extra high for heavier coding. Effort stays the same for a whole conversation, because changing it mid-conversation would throw away the prompt cache.
+
+**Voice** (in Settings): Pace picks the most natural voice your device has. Pick another, change the speed, and tap **Test voice** to hear it. In Chrome the "Google" voices sound best, and in Edge the "Natural" ones. On iPhone, download an Enhanced or Premium voice in Settings → Accessibility → Spoken Content → Voices → English.
+
+**Chats:** every conversation is saved in this browser (up to 50), encrypted. With a passcode set, chats lock along with your keys. Tap the clock icon to reopen one and carry on where you left off. **Clear** (✎) starts a new chat and keeps the old one. Forgetting your passcode erases the chats, because they can't be decrypted without it.
+
+**Mic trouble:** under the mic button, Pace shows "Starting the mic…", then "Go ahead, I'm listening…" once it actually hears audio, and "Hearing you…" when you speak. If the mic never starts, or hears nothing twice in a row, it says so. On iPhone, use Safari.
 
 ## Install it like an app
 - **iPhone:** open the site in Safari → Share → **Add to Home Screen**. It gets the Pace icon and opens full screen.

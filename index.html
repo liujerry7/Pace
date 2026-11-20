@@ -417,6 +417,25 @@
     .qr { width: min(100%, 300px); align-self: center; padding: 10px; background: #fff; border-radius: 14px; }
     .qr svg { width: 100%; height: auto; }
     .transfer-code { margin: 0; font: 700 28px/1.2 var(--mono); letter-spacing: .08em; color: var(--text); }
+    .field input[type="range"] { padding: 0; background: none; border: none; accent-color: var(--accent); box-shadow: none; }
+    .chat-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .chat-list li { display: flex; align-items: center; gap: 8px; }
+    .chat-open {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+      padding: 12px 14px;
+      text-align: left;
+      background: var(--surface-2);
+      border: none;
+      border-radius: 12px;
+    }
+    .chat-open:hover { background: var(--border); }
+    .chat-title { max-width: 100%; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chat-meta { font-size: 13px; color: var(--muted); }
     .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
     .link { background: none; border: none; color: var(--muted); font-size: 13.5px; text-decoration: underline; }
   </style>
@@ -427,6 +446,9 @@
       <div class="brand"><span class="dot"></span>Pace</div>
       <div class="top-actions">
         <button id="modeBtn" class="pill" type="button">Hands-free</button>
+        <button id="historyBtn" class="icon-btn" type="button" aria-label="Chat history">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+        </button>
         <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
@@ -482,12 +504,29 @@
           <div class="field">
             <label for="effortInput">Effort</label>
             <select id="effortInput">
+              <option value="auto">Auto: quick chat, Medium when coding</option>
               <option value="low">Low: fastest replies</option>
               <option value="medium">Medium: balanced</option>
               <option value="high">High: harder coding</option>
               <option value="xhigh">Extra high: hardest coding (slow)</option>
             </select>
           </div>
+        </section>
+
+        <section>
+          <h3>Voice</h3>
+          <div class="field">
+            <label for="voiceInput">Voice</label>
+            <select id="voiceInput"></select>
+          </div>
+          <div class="field">
+            <label for="rateInput">Speed <span id="rateLabel"></span></label>
+            <input id="rateInput" type="range" min="0.8" max="1.4" step="0.05">
+          </div>
+          <button id="testVoice" class="btn" type="button" style="align-self: flex-start">Test voice</button>
+          <p class="hint">Sounds robotic? In Chrome the “Google” voices sound best, in Edge the “Natural” ones. On
+            iPhone, download an Enhanced or Premium voice in Settings → Accessibility → Spoken Content → Voices →
+            English, then pick it here. Each device has its own voices.</p>
         </section>
 
         <section>
@@ -556,6 +595,25 @@
         <button id="saveKey" class="btn primary" type="submit">Save</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Saved chats -->
+  <dialog id="historyDialog" aria-labelledby="historyTitle">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2 id="historyTitle" tabindex="-1" autofocus style="outline: none">Chats</h2>
+        <button id="closeHistory" class="icon-btn" type="button" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="sheet-body">
+        <ul id="chatList" class="chat-list"></ul>
+        <p id="historyEmpty" class="hint" hidden>No saved chats yet.</p>
+      </div>
+      <div class="sheet-foot">
+        <button id="clearHistory" class="btn danger" type="button">Delete all chats</button>
+      </div>
+    </div>
   </dialog>
 
   <!-- Send setup: QR code plus the one-time code that unlocks it -->
@@ -689,7 +747,9 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       return '\n\nYou are connected to the GitHub repository ' + repo + ' and can read and ' +
         'change its code with your tools. Every change you make is a commit on the branch "' +
         branch + '" (created from the default branch the first time you write), so the user ' +
-        'can review and merge it later. Look before you change: use list_files and read_file ' +
+        'can review and merge it later. Before your first tool call in a reply, say one short ' +
+        'sentence about what you are about to do, so the user hears you right away. Look ' +
+        'before you change: use list_files and read_file ' +
         'to understand the relevant code first. Prefer edit_file for changes to existing files; ' +
         'use write_file for new files or full rewrites. Write complete, working code that ' +
         'matches the project\'s style, and give each commit a clear message. Carry the whole ' +
@@ -748,7 +808,12 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     let conversationOn = false;   // hands-free loop running?
     // Secrets come from plain storage, or from the encrypted vault after unlocking.
     let apiKey = store.get('pace-api-key') || '';
-    let effort = store.get('pace-effort') || 'medium';
+    let effort = store.get('pace-effort') || 'auto';
+    // Medium used to be the default; Auto is the same while coding and quicker for plain chat.
+    if (effort === 'medium' && !store.get('pace-effort-v2')) { effort = 'auto'; store.set('pace-effort', 'auto'); }
+    store.set('pace-effort-v2', '1');
+    // Fixed for a whole conversation: changing effort mid-conversation throws away the prompt cache.
+    const effectiveEffort = () => (effort === 'auto' ? (codingOn() ? 'medium' : 'low') : effort);
     const gh = {
       repo:   store.get('pace-gh-repo') || '',
       branch: store.get('pace-gh-branch') || DEFAULT_BRANCH,
@@ -761,6 +826,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     const codingOn = () => !!(gh.repo && gh.token);
 
     const lines = [];     // plain-text log for "Copy all"
+    const log = [];       // what's on screen, for saving and reopening chats
     const history = [];   // messages sent to Claude (the conversation so far)
 
     let turnActive = false;   // Claude is streaming or running tools
@@ -782,13 +848,13 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
           idle: 'Hold to talk', listening: 'Listening · release to send',
           thinking: 'Working · hold to interrupt', speaking: 'Speaking · hold to interrupt',
         }[p];
-        liveEl.dataset.placeholder = p === 'idle' ? 'Hold the mic and speak' : '';
+        liveEl.dataset.placeholder = p === 'idle' ? 'Hold the mic and speak' : p === 'listening' ? 'Starting the mic…' : '';
       } else {
         label = {
           idle: 'Tap to start', listening: 'Listening · tap to stop',
           thinking: 'Working · tap to stop', speaking: 'Speaking · tap to interrupt',
         }[p];
-        liveEl.dataset.placeholder = p === 'listening' ? 'Go ahead, I’m listening…' : '';
+        liveEl.dataset.placeholder = p === 'listening' ? 'Starting the mic…' : '';
       }
       talkLabel.textContent = label;
       talkBtn.setAttribute('aria-label', label);
@@ -865,6 +931,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
 
     function addLine(role, text, url) {
       lines.push(LABELS[role] ? LABELS[role] + ' ' + text : text + (url ? ' ' + url : ''));
+      log.push(url ? { role, text, url } : { role, text });
+      scheduleSave();
       const body = makeLine(role);
       renderBody(body, role, text);
       if (url) {
@@ -918,6 +986,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       scrollToEnd();
       feedSpeech(s, true);
       lines.push((LABELS[s.role] ? LABELS[s.role] + ' ' : '… ') + s.text.trim());
+      log.push({ role: s.role, text: s.text.trim() });
+      scheduleSave();
     }
 
     // =====================================================================
@@ -952,16 +1022,53 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       say(chunk);
     }
 
+    // ---- Voice: the most natural voice this device has, unless you pick one.
+    const NOVELTY_VOICES = /^(Albert|Bad News|Bahh|Bells|Boing|Bubbles|Cellos|Good News|Jester|Organ|Superstar|Trinoids|Whisper|Wobble|Zarvox|Grandma|Grandpa|Rocko|Shelley|Junior|Ralph|Fred|Kathy)\b/i;
+    let voiceURI = store.get('pace-voice') || '';
+    let speechRate = parseFloat(store.get('pace-rate')) || 1.05;
+
+    function listVoices() {
+      const all = synth && typeof synth.getVoices === 'function' ? synth.getVoices() : [];
+      return all.filter((v) => /^en([-_]|$)/i.test(v.lang) && !NOVELTY_VOICES.test(v.name));
+    }
+    function scoreVoice(v) {
+      let score = 0;
+      if (/natural|neural/i.test(v.name)) score += 50;   // Edge's online voices
+      if (/premium/i.test(v.name)) score += 45;          // Apple's downloadable voices
+      if (/enhanced/i.test(v.name)) score += 40;
+      if (/siri/i.test(v.name)) score += 35;
+      if (/^Google /i.test(v.name)) score += 30;         // Chrome's online voices
+      if (/\b(Ava|Zoe|Evan|Nathan|Allison|Samantha|Joelle|Noelle|Susan|Tom)\b/i.test(v.name)) score += 10;
+      if (/en[-_]US/i.test(v.lang)) score += 5;
+      if (v.localService === false) score += 3;
+      return score;
+    }
+    const rankVoices = () => listVoices().sort((a, b) => scoreVoice(b) - scoreVoice(a) || a.name.localeCompare(b.name));
+    function pickVoice(uri) {
+      const voices = rankVoices();
+      return voices.find((v) => v.voiceURI === uri) || voices[0] || null;
+    }
+
     function say(text) {
       const clean = text.replace(/[*_#`>|]/g, '').replace(/\s+/g, ' ').trim();
       if (!synth || !/[a-z0-9]/i.test(clean)) return;
       const gen = speechGen;
-      // Chrome can cut off long utterances, so speak sentence by sentence.
-      // Split only where punctuation is followed by a space, so "a.js" stays whole.
+      const voice = pickVoice(voiceURI);
+      // Group whole sentences into chunks: fewer pauses than one utterance per
+      // sentence, but short enough that Chrome doesn't cut them off. Split only
+      // where punctuation is followed by a space, so "a.js" stays whole.
+      const chunks = [];
       clean.split(/(?<=[.!?])\s+/).forEach((piece) => {
-        if (!piece.trim()) return;
-        const u = new SpeechSynthesisUtterance(piece.trim());
-        u.lang = 'en-US';
+        piece = piece.trim();
+        if (!piece) return;
+        const last = chunks.length - 1;
+        if (last >= 0 && chunks[last].length + piece.length < 180) chunks[last] += ' ' + piece;
+        else chunks.push(piece);
+      });
+      chunks.forEach((piece) => {
+        const u = new SpeechSynthesisUtterance(piece);
+        if (voice) { u.voice = voice; u.lang = voice.lang; } else u.lang = 'en-US';
+        u.rate = speechRate;
         const done = () => { if (gen !== speechGen) return; speechPending--; updatePhase(); };
         u.onend = done;
         u.onerror = done;
@@ -1006,7 +1113,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
           (conventionsText() ? conventionsPrompt(conventionsText()) : ''),
         // Reasoning stays hidden; short progress notes between tool calls come back as text.
         thinking: { type: 'adaptive', display: 'updates' },
-        output_config: { effort },
+        output_config: { effort: effectiveEffort() },
         fallbacks: 'default',
         cache_control: { type: 'ephemeral' },   // re-reading the conversation each step is cheap
         messages: history,
@@ -1208,6 +1315,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         if (wrote && !ctrl.cleared) {
           addLine('info', 'Changes are on branch ' + gh.branch + ':', 'https://github.com/' + gh.repo + '/tree/' + gh.branch);
         }
+        scheduleSave();
         if (turnAbort === ctrl) turnAbort = null;
         turnActive = false;
         if (!ctrl.signal.aborted) {
@@ -1589,6 +1697,17 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       recognition.lang = 'en-US';
       recognition.interimResults = true;   // show words as they are heard
 
+      // Say what the mic is actually doing, so silence never looks like nothing happening.
+      recognition.onaudiostart = () => {
+        audioStarted = true;
+        recEverWorked = true;
+        clearTimeout(startWatchdog);
+        if (phase === 'listening') liveEl.dataset.placeholder = 'Go ahead, I’m listening…';
+      };
+      recognition.onspeechstart = () => {
+        if (phase === 'listening') liveEl.dataset.placeholder = 'Hearing you…';
+      };
+
       // Rebuild the live text from all results so far.
       recognition.onresult = (event) => {
         let finalText = '', interimText = '';
@@ -1599,6 +1718,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         }
         sessionText = (finalText + ' ' + interimText).trim();
         liveEl.textContent = (savedText + ' ' + sessionText).trim();
+        noSpeechCount = 0;
       };
 
       recognition.onend = () => {
@@ -1628,7 +1748,18 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       };
 
       recognition.onerror = (event) => {
-        if (event.error === 'no-speech' || event.error === 'aborted') return; // onend handles it
+        if (event.error === 'aborted') return;   // onend handles it
+        if (event.error === 'no-speech') {
+          if (++noSpeechCount >= 2) showStatus('I’m not hearing anything. Check that the right microphone is selected and isn’t muted.', true);
+          return;
+        }
+        // Some browsers (iPhone) won't restart the mic without a tap.
+        if (event.error === 'not-allowed' && recEverWorked) {
+          showStatus('Tap the mic to talk again.');
+          holding = false;
+          stopConversation();
+          return;
+        }
         const messages = {
           'not-allowed': 'Microphone access was blocked. Allow the mic for this site and make sure the page is opened over HTTPS.',
           'service-not-allowed': 'Speech service not allowed. Try Chrome, over HTTPS.',
@@ -1643,13 +1774,26 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       };
     }
 
+    let audioStarted = false, recEverWorked = false, noSpeechCount = 0, startWatchdog = null;
+    const OTHER_IOS_BROWSER = /CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent || '');
+
     function startRecognizer(continuous) {
       if (recRunning) return;
       recognition.continuous = continuous;
       try { recognition.start(); recRunning = true; } catch { /* already running */ }
+      // If the mic never actually opens, say so instead of sitting there silently.
+      audioStarted = false;
+      clearTimeout(startWatchdog);
+      startWatchdog = setTimeout(() => {
+        if (!recRunning || audioStarted) return;
+        showStatus(OTHER_IOS_BROWSER
+          ? 'On iPhone, voice input only works reliably in Safari. Open Pace in Safari.'
+          : 'The microphone hasn’t started. Check that this site may use the mic and that no other app is using it.', true);
+      }, 4000);
     }
 
     function stopRecognizer() {
+      clearTimeout(startWatchdog);
       if (recRunning) recognition.abort();
       recRunning = false;
     }
@@ -1754,6 +1898,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     // =====================================================================
     const VAULT = 'pace-vault';
     let vaultKey = null, vaultSalt = null;   // set while a passcode is in use
+    // Encrypts saved chats. Plain storage without a passcode, inside the vault with one.
+    let dataKeyRaw = store.get('pace-data-key') || '', dataKeyObj = null;
 
     const b64e = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
     const b64d = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -1772,15 +1918,17 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     async function saveSecrets() {
       if (vaultKey) {
         const iv = crypto.getRandomValues(new Uint8Array(12));
-        const plain = new TextEncoder().encode(JSON.stringify({ apiKey, ghToken: gh.token }));
+        const plain = new TextEncoder().encode(JSON.stringify({ apiKey, ghToken: gh.token, dataKey: dataKeyRaw }));
         const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, vaultKey, plain);
         store.set(VAULT, JSON.stringify({ v: 1, salt: b64e(vaultSalt), iv: b64e(iv), data: b64e(data) }));
         store.del('pace-api-key');
         store.del('pace-gh-token');
+        store.del('pace-data-key');
       } else {
         store.del(VAULT);
         saveOrDelete('pace-api-key', apiKey);
         saveOrDelete('pace-gh-token', gh.token);
+        saveOrDelete('pace-data-key', dataKeyRaw);
       }
     }
 
@@ -1795,6 +1943,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       vaultSalt = salt;
       apiKey = s.apiKey || '';
       gh.token = s.ghToken || '';
+      dataKeyRaw = s.dataKey || store.get('pace-data-key') || '';
+      dataKeyObj = null;
     }
 
     function refreshLockUI() {
@@ -1828,6 +1978,9 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       ghTokenInput.value = '';
       ghTokenInput.placeholder = savedHint(gh.token, 'github_pat_…');
       $('allowDefaultInput').checked = gh.allowDefault;
+      fillVoiceSelect();
+      $('rateInput').value = speechRate;
+      showRate();
       $('convInput').value = conventionsText();
       const list = $('repoList');
       list.textContent = '';
@@ -1865,6 +2018,10 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       gh.branch = ghBranchInput.value.trim() || DEFAULT_BRANCH;
       gh.token = ghTokenInput.value.trim() || gh.token;
       gh.allowDefault = $('allowDefaultInput').checked;
+      voiceURI = $('voiceInput').value;
+      speechRate = parseFloat($('rateInput').value) || 1;
+      saveOrDelete('pace-voice', voiceURI);
+      store.set('pace-rate', String(speechRate));
       const conv = $('convInput').value.trim();
       conventions = conv === DEFAULT_CONVENTIONS.trim() ? null : conv;
 
@@ -1888,6 +2045,37 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
           codingOn() ? 'Saved. Claude can now code in ' + gh.repo + '.' : 'Saved.') +
         (pass ? ' Passcode lock is on.' : '')
       );
+    });
+
+    function fillVoiceSelect() {
+      const select = $('voiceInput'), voices = rankVoices();
+      select.textContent = '';
+      const auto = document.createElement('option');
+      auto.value = '';
+      auto.textContent = 'Automatic' + (voices[0] ? ' (' + voices[0].name + ')' : '');
+      select.appendChild(auto);
+      voices.forEach((v) => {
+        const o = document.createElement('option');
+        o.value = v.voiceURI;
+        o.textContent = v.name + (v.localService === false ? ' · online' : '');
+        select.appendChild(o);
+      });
+      select.value = voices.some((v) => v.voiceURI === voiceURI) ? voiceURI : '';
+    }
+    const showRate = () => { $('rateLabel').textContent = '· ' + parseFloat($('rateInput').value).toFixed(2) + '×'; };
+    $('rateInput').addEventListener('input', showRate);
+    // Voices load late in some browsers.
+    if (synth && typeof synth.addEventListener === 'function') {
+      synth.addEventListener('voiceschanged', () => { if (settingsEl.open) fillVoiceSelect(); });
+    }
+    $('testVoice').addEventListener('click', () => {
+      if (!synth) return;
+      stopSpeaking();
+      const u = new SpeechSynthesisUtterance('Hi, I’m Pace. This is how I’ll sound when we talk. Want to build something?');
+      const voice = pickVoice($('voiceInput').value);
+      if (voice) { u.voice = voice; u.lang = voice.lang; }
+      u.rate = parseFloat($('rateInput').value) || 1;
+      synth.speak(u);
     });
 
     $('convReset').addEventListener('click', () => { $('convInput').value = DEFAULT_CONVENTIONS; });
@@ -1914,6 +2102,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       store.del(VAULT);
       store.del('pace-api-key');
       store.del('pace-gh-token');
+      if (dataKeyRaw) store.set('pace-data-key', dataKeyRaw);   // keep saved chats readable
       settingsEl.close();
       clearConversation();
       showStatus('API key, GitHub token and passcode removed from this browser.');
@@ -2325,12 +2514,189 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         (pass ? ' Passcode lock is on.' : ''));
     });
 
+    // =====================================================================
+    // Chat history: each conversation is saved in this browser (IndexedDB),
+    // encrypted with a random data key. With a passcode, that data key lives
+    // inside the passcode vault, so your history locks along with your keys.
+    // =====================================================================
+    const chatStore = {
+      dbPromise: null,
+      open() {
+        if (!this.dbPromise) {
+          this.dbPromise = new Promise((resolve, reject) => {
+            const req = indexedDB.open('pace', 1);
+            req.onupgradeneeded = () => req.result.createObjectStore('chats', { keyPath: 'id' });
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          });
+        }
+        return this.dbPromise;
+      },
+      async run(mode, action) {
+        const db = await this.open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction('chats', mode);
+          const req = action(tx.objectStore('chats'));
+          tx.oncomplete = () => resolve(req.result);
+          tx.onerror = () => reject(tx.error);
+        });
+      },
+      all() { return this.run('readonly', (st) => st.getAll()); },
+      put(rec) { return this.run('readwrite', (st) => st.put(rec)); },
+      del(id) { return this.run('readwrite', (st) => st.delete(id)); },
+      clear() { return this.run('readwrite', (st) => st.clear()); },
+    };
+    const MAX_CHATS = 50;
+    const historyEl = $('historyDialog');
+    let chatId = null, chatCreated = 0, saveTimer = null, restoring = false;
+
+    const isLocked = () => !!store.get(VAULT) && !vaultKey;
+
+    async function getDataKey() {
+      if (!dataKeyRaw) {
+        dataKeyRaw = b64e(crypto.getRandomValues(new Uint8Array(32)));
+        await saveSecrets();
+      }
+      if (!dataKeyObj) dataKeyObj = await crypto.subtle.importKey('raw', b64d(dataKeyRaw), 'AES-GCM', false, ['encrypt', 'decrypt']);
+      return dataKeyObj;
+    }
+
+    async function openChatRecord(rec) {
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: rec.iv }, await getDataKey(), rec.data);
+      return JSON.parse(new TextDecoder().decode(plain));
+    }
+
+    // Snapshot now (before anything can change), encrypt and store after.
+    function saveChat() {
+      if (!log.length || isLocked()) return Promise.resolve();
+      if (!chatId) {
+        chatId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        chatCreated = Date.now();
+      }
+      const id = chatId;
+      const first = log.find((l) => l.role === 'user') || log[0];
+      const payload = JSON.stringify({ title: first.text.slice(0, 80), repo: gh.repo, created: chatCreated, log, history });
+      return (async () => {
+        const key = await getDataKey();
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(payload));
+        await chatStore.put({ id, updated: Date.now(), iv, data });
+        const all = await chatStore.all();
+        if (all.length > MAX_CHATS) {
+          for (const old of all.sort((a, b) => b.updated - a.updated).slice(MAX_CHATS)) await chatStore.del(old.id);
+        }
+      })();
+    }
+    function scheduleSave() {
+      if (restoring) return;
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => { saveTimer = null; saveChat().catch(() => {}); }, 600);
+    }
+    function flushSave() {
+      if (!saveTimer) return;
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      saveChat().catch(() => {});
+    }
+
+    function formatWhen(ts) {
+      const sec = (Date.now() - ts) / 1000;
+      if (sec < 60) return 'just now';
+      if (sec < 3600) return Math.floor(sec / 60) + ' min ago';
+      if (sec < 86400) return Math.floor(sec / 3600) + ' h ago';
+      if (sec < 172800) return 'yesterday';
+      return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    function restoreChat(id, chat) {
+      flushSave();
+      clearConversation();
+      restoring = true;
+      try {
+        (chat.log || []).forEach((l) => addLine(l.role, l.text, l.url));
+      } finally {
+        restoring = false;
+      }
+      history.push(...(chat.history || []));
+      repairHistory();
+      chatId = id;
+      chatCreated = chat.created || Date.now();
+      const moved = chat.repo && chat.repo !== gh.repo;
+      showStatus('Picked up where you left off.' +
+        (moved ? ' This chat was in ' + chat.repo + '; you’re connected to ' + (gh.repo || 'no repo') + ' now.' : ''));
+    }
+
+    async function openHistory() {
+      const list = $('chatList'), empty = $('historyEmpty');
+      list.textContent = '';
+      empty.hidden = true;
+      $('clearHistory').textContent = 'Delete all chats';
+      historyEl.showModal();
+      flushSave();
+      let recs;
+      try {
+        recs = await chatStore.all();
+      } catch {
+        empty.textContent = 'Chat history isn’t available in this browser (private browsing?).';
+        empty.hidden = false;
+        return;
+      }
+      recs.sort((a, b) => b.updated - a.updated);
+      for (const rec of recs) {
+        let chat;
+        try { chat = await openChatRecord(rec); } catch { continue; }   // from a key that's gone
+        const li = document.createElement('li');
+        const open = document.createElement('button');
+        open.type = 'button';
+        open.className = 'chat-open';
+        const title = document.createElement('span');
+        title.className = 'chat-title';
+        title.textContent = chat.title || 'Untitled';
+        const meta = document.createElement('span');
+        meta.className = 'chat-meta';
+        meta.textContent = formatWhen(rec.updated) + (chat.repo ? ' · ' + chat.repo.split('/').pop() : '') +
+          (rec.id === chatId ? ' · open now' : '');
+        open.append(title, meta);
+        open.addEventListener('click', () => { historyEl.close(); restoreChat(rec.id, chat); });
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'icon-btn';
+        del.setAttribute('aria-label', 'Delete this chat');
+        del.textContent = '✕';
+        del.addEventListener('click', async () => {
+          await chatStore.del(rec.id);
+          if (rec.id === chatId) chatId = null;
+          li.remove();
+          if (!list.querySelector('li')) { empty.textContent = 'No saved chats yet.'; empty.hidden = false; }
+        });
+        li.append(open, del);
+        list.appendChild(li);
+      }
+      if (!list.querySelector('li')) { empty.textContent = 'No saved chats yet.'; empty.hidden = false; }
+    }
+    $('historyBtn').addEventListener('click', () => { if (!isLocked()) openHistory(); });
+    $('closeHistory').addEventListener('click', () => historyEl.close());
+    historyEl.addEventListener('click', (e) => { if (e.target === historyEl) historyEl.close(); });
+    $('clearHistory').addEventListener('click', async () => {
+      const btn = $('clearHistory');
+      if (btn.textContent !== 'Tap again to delete every chat') { btn.textContent = 'Tap again to delete every chat'; return; }
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      await chatStore.clear().catch(() => {});
+      chatId = null;
+      historyEl.close();
+      showStatus('Chat history deleted from this browser.');
+    });
+
     // ---- Clear and Copy all ----
     function clearConversation() {
       if (turnAbort) turnAbort.cleared = true;
       stopConversation();
+      flushSave();             // the chat you're leaving is kept in history
+      chatId = null;
       seg = null;
       lines.length = 0;
+      log.length = 0;
       history.length = 0;      // also starts a fresh conversation with Claude
       transcriptEl.innerHTML = '';
       liveEl.textContent = '';
@@ -2373,7 +2739,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     let pendingSetup = '';
     if ((location.hash || '').startsWith(SETUP_PREFIX)) {
       pendingSetup = location.href;
-      history.replaceState(null, '', location.pathname + location.search);
+      window.history.replaceState(null, '', location.pathname + location.search);   // `history` is the chat
     }
 
     setPhase('idle');
@@ -2397,11 +2763,13 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       // Two taps to erase, so it can't happen by accident.
       let armed = false;
       lockReset.addEventListener('click', () => {
-        if (!armed) { armed = true; lockReset.textContent = 'Tap again to erase your saved key and token'; return; }
+        if (!armed) { armed = true; lockReset.textContent = 'Tap again to erase your saved keys and chats'; return; }
         store.del(VAULT);
         apiKey = ''; gh.token = '';
+        dataKeyRaw = ''; dataKeyObj = null;
+        chatStore.clear().catch(() => {});   // they can't be decrypted any more
         ready();
-        showStatus('Saved keys erased. Add them again in ⚙️ Settings.');
+        showStatus('Saved keys and chat history erased. Add your keys again in ⚙️ Settings.');
       });
     } else {
       ready();
