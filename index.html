@@ -577,6 +577,12 @@
             <datalist id="repoList"></datalist>
           </div>
           <div class="field">
+            <label for="ghExtraInput">Other repos</label>
+            <input id="ghExtraInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="owner/engine, owner/tools">
+          </div>
+          <p class="hint">Other repos Claude may change in the same chat, such as the engine your game uses. Separate
+            them with commas. The token needs access to each.</p>
+          <div class="field">
             <label for="ghBranchInput">Work branch</label>
             <input id="ghBranchInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="pace">
           </div>
@@ -695,6 +701,21 @@
       </div>
       <div class="sheet-foot">
         <button id="clearHistory" class="btn danger" type="button">Delete all chats</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="confirmDialog" aria-labelledby="confirmTitle">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2 id="confirmTitle" tabindex="-1" autofocus style="outline: none">Confirm</h2>
+      </div>
+      <div class="sheet-body">
+        <p id="confirmText"></p>
+      </div>
+      <div class="sheet-foot">
+        <button id="confirmCancel" class="btn" type="button">Cancel</button>
+        <button id="confirmOk" class="btn primary" type="button">OK</button>
       </div>
     </div>
   </dialog>
@@ -849,7 +870,24 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         'rounds) before telling the user it is done; say whether it built. If check_build says ' +
         'no build is set up, be extra careful with syntax, includes and declarations, and tell ' +
         'the user to build it themselves. Keep each ' +
-        'file\'s existing line endings and indentation.';
+        'file\'s existing line endings and indentation.' + multiRepoPrompt(repo, branch) +
+        '\n\nYou also have git tools: list_branches, git_log, compare_branches, merge_branch and ' +
+        'open_pull_request. Before merging, use compare_branches and say in a sentence what will go in. ' +
+        'Merge into the default branch only when the user asks for it, and only work that built (if the repo has ' +
+        'a build). Pace then asks the user to confirm on screen, so say "tap Merge on the screen" right before ' +
+        'you call it. If a merge conflicts, say which files and that they can resolve it in a pull request on ' +
+        'GitHub or in Visual Studio.';
+    }
+
+    function multiRepoPrompt(repo, branch) {
+      const repos = connectedRepos();
+      if (repos.length < 2) return '';
+      return '\n\nYou are connected to several repositories: ' + repos.join(', ') + '. ' + repo + ' is the main ' +
+        'one; pass "repo" on a tool call to work in another. Each repo gets its own "' + branch + '" branch. A ' +
+        'task can span repos (for example a game and the engine it is built on): make the changes in each repo, ' +
+        'then build. A repo\'s build compiles it against the other connected repos it uses, at their "' + branch +
+        '" branch when that exists, so after changing a repo with no build of its own, call check_build on the ' +
+        'repo that has one. check_build notices when only the other repo changed and rebuilds.';
     }
 
     // Without a repo, Claude works on files kept in this browser.
@@ -984,6 +1022,11 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       branch: store.get('pace-gh-branch') || DEFAULT_BRANCH,
       token:  store.get('pace-gh-token') || '',
       allowDefault: store.get('pace-gh-allow-default') === '1',
+      // Other repos Claude may change in the same chat (e.g. the engine a game uses).
+      extra: (() => {
+        try { const a = JSON.parse(store.get('pace-gh-extra') || '[]'); return Array.isArray(a) ? a.filter((r) => typeof r === 'string') : []; }
+        catch { return []; }
+      })(),
     };
     // null = use the built-in defaults (so later updates to them reach you).
     let conventions = store.get('pace-conventions');
@@ -1450,7 +1493,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       setPhase('thinking');
 
       let answered = false;   // an assistant message was added this turn
-      let wrote = false;      // a commit was made this turn
+      const wrote = new Set();   // repos committed to this turn
       const handlers = {
         blockStart: () => endSegment(),
         text: (d) => segAppend('assistant', d),
@@ -1488,7 +1531,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
           for (const call of calls) {
             const truncated = msg.stop_reason === 'max_tokens' && call === calls[calls.length - 1];
             const r = await runTool(call, { truncated, badJson: msg.badJson.has(call.id) }, ctrl.signal);
-            if (r.wrote) wrote = true;
+            if (r.wrote) wrote.add(r.wrote);
             results.push(r.result);
           }
           history.push({ role: 'user', content: results });
@@ -1508,8 +1551,11 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       } finally {
         endSegment();
         repairHistory();
-        if (wrote && !ctrl.cleared) {
-          addLine('info', 'Changes are on branch ' + gh.branch + ':', 'https://github.com/' + gh.repo + '/tree/' + gh.branch);
+        if (!ctrl.cleared) {
+          for (const repo of wrote) {
+            addLine('info', 'Changes are on branch ' + gh.branch + (wrote.size > 1 || repo !== gh.repo ? ' of ' + repo : '') + ':',
+              'https://github.com/' + repo + '/tree/' + gh.branch);
+          }
         }
         scheduleSave();
         if (turnAbort === ctrl) turnAbort = null;
@@ -1619,6 +1665,46 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         description: 'Compile the latest commit on the work branch (GitHub Actions) and wait for the result: passed or failed, with compiler errors and warnings. Takes a few minutes. Call it after a set of changes, not after every edit.',
         input_schema: { type: 'object', properties: {}, required: [] },
       },
+      {
+        name: 'list_branches',
+        description: 'List the branches of the repository, marking the default branch and the work branch.',
+        input_schema: { type: 'object', properties: {}, required: [] },
+      },
+      {
+        name: 'git_log',
+        description: 'Show recent commits on a branch, newest first: short sha, date, author and message.',
+        input_schema: { type: 'object', properties: {
+          branch: str('Branch name. Omit for the work branch (or the default branch until the work branch exists).'),
+          count: { type: 'integer', description: 'How many commits, 1 to 50. Default 15.' },
+        }, required: [] },
+      },
+      {
+        name: 'compare_branches',
+        description: 'Compare two branches: how far ahead and behind, the commits, and the changed files with their diffs (cut off if long). Use it to review the work branch before merging.',
+        input_schema: { type: 'object', properties: {
+          base: str('The branch to compare against. Omit for the default branch.'),
+          head: str('The branch with the changes. Omit for the work branch.'),
+        }, required: [] },
+      },
+      {
+        name: 'merge_branch',
+        description: 'Merge one branch into another on GitHub (a merge commit, like git merge). Omit both to merge the work branch into the default branch. Merging into the default branch shows the user a confirmation on screen and waits for their tap. Merging the default branch into the work branch brings the work branch up to date. If the branches conflict, nothing is merged and you get the files changed on both sides.',
+        input_schema: { type: 'object', properties: {
+          base: str('The branch to merge INTO. Omit for the default branch.'),
+          head: str('The branch to merge FROM. Omit for the work branch.'),
+          message: str('Merge commit message. Optional.'),
+        }, required: [] },
+      },
+      {
+        name: 'open_pull_request',
+        description: 'Open a pull request on GitHub, from the work branch into the default branch unless told otherwise, and return its link. The token needs Pull requests: Read and write; if it lacks that, the error says so.',
+        input_schema: { type: 'object', properties: {
+          title: str('Pull request title.'),
+          body: str('Description: what changed and what to check. Optional.'),
+          base: str('The branch to merge into. Omit for the default branch.'),
+          head: str('The branch with the changes. Omit for the work branch.'),
+        }, required: ['title'] },
+      },
     ].map((t) => ({ ...t, eager_input_streaming: true }));   // big file contents stream as they're written
 
     // Same tool names when no repo is connected, working on files kept in this browser.
@@ -1670,10 +1756,18 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     // Server tool: Anthropic runs the search and the results come back inside Claude's reply.
     const WEB_SEARCH_DEF = { type: 'web_search_20260209', name: 'web_search', max_uses: 5 };
 
+    // With more than one repo connected, every GitHub tool takes "repo".
+    function repoToolDefs() {
+      const repos = connectedRepos();
+      if (repos.length < 2) return TOOL_DEFS;
+      const prop = str('Which repo: ' + repos.join(', ') + '. Omit for ' + gh.repo + '.');
+      return TOOL_DEFS.map((t) => ({ ...t, input_schema: { ...t.input_schema, properties: { ...t.input_schema.properties, repo: prop } } }));
+    }
+
     // The tools sent with each request. They change only when a repo is connected
     // or disconnected (changing tools mid-conversation discards earlier thinking).
     function currentTools() {
-      const tools = [...(codingOn() ? TOOL_DEFS : LOCAL_TOOL_DEFS), RUN_JS_DEF, ...(ENABLE_WEB_SEARCH ? [WEB_SEARCH_DEF] : [])];
+      const tools = [...(codingOn() ? repoToolDefs() : LOCAL_TOOL_DEFS), RUN_JS_DEF, ...(ENABLE_WEB_SEARCH ? [WEB_SEARCH_DEF] : [])];
       if (lifelineOn()) {
         // Allowlist: everything off by default, then only the tools named here.
         const allowed = [...LIFELINE_READ_TOOLS, ...(lifeline.writes ? LIFELINE_WRITE_TOOLS : [])];
@@ -1702,7 +1796,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         const runners = call.name === 'run_javascript' ? { run_javascript: runJavaScriptTool }
           : codingOn() ? TOOL_RUNNERS : LOCAL_RUNNERS;
         const out = await runners[call.name](input, signal);
-        return { result: { type: 'tool_result', tool_use_id: call.id, content: out.text }, wrote: !!out.wrote };
+        return { result: { type: 'tool_result', tool_use_id: call.id, content: out.text }, wrote: out.wrote || '' };
       } catch (e) {
         if (signal.aborted) throw e;
         addLine('tool', '⚠️ ' + call.name + ': ' + e.message);
@@ -1742,8 +1836,9 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
 
     const encodePath = (p) => p.replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/');
 
-    async function ghFetch(path, opts, signal) {
-      const res = await fetch('https://api.github.com/repos/' + gh.repo + path, {
+    // Every GitHub call names its repo: Pace can be connected to several at once.
+    async function ghFetch(repo, path, opts, signal) {
+      const res = await fetch('https://api.github.com/repos/' + repo + path, {
         method: (opts && opts.method) || 'GET',
         body: opts && opts.body ? JSON.stringify(opts.body) : undefined,
         signal,
@@ -1760,45 +1855,71 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         const m = (data && data.message) || ('HTTP ' + res.status);
         const err = new Error(
           res.status === 401 ? 'GitHub rejected the token. Check it in ⚙️ Settings.' :
-          res.status === 403 ? 'GitHub refused (' + m + '). The token may not have Contents write access to ' + gh.repo + '.' :
-          res.status === 404 ? 'Not found on GitHub (' + m + ').' :
+          res.status === 403 ? 'GitHub refused (' + m + '). The token may not have Contents write access to ' + repo + '.' :
+          res.status === 404 ? 'Not found on GitHub (' + m + '). If ' + repo + ' is right, the token may not include it.' :
           'GitHub error: ' + m
         );
         err.status = res.status;
+        err.data = data;
         throw err;
       }
       return data;
     }
 
-    // Work branch: read from it once it exists; create it from the default
-    // branch on the first write.
-    let branchState = null;   // { base, exists }
-    async function getBranchState(signal) {
-      if (branchState) return branchState;
-      const repo = await ghFetch('', null, signal);
-      let exists = true;
-      try { await ghFetch('/git/ref/heads/' + encodePath(gh.branch), null, signal); }
-      catch (e) { if (e.status === 404) exists = false; else throw e; }
-      branchState = { base: repo.default_branch, exists };
-      return branchState;
+    // "https://github.com/o/r.git" -> "o/r"
+    const cleanRepo = (r) => String(r || '').trim()
+      .replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '');
+    // The main repo first, then the others from Settings.
+    const connectedRepos = () => (gh.repo
+      ? [gh.repo, ...gh.extra.filter((r) => r.toLowerCase() !== gh.repo.toLowerCase())] : []);
+    // The repo a tool call is about: its "repo" input (full name or just the
+    // name), or the main repo. Only connected repos are allowed.
+    function pickRepo(input) {
+      const want = cleanRepo(input && input.repo);
+      if (!want) return gh.repo;
+      const list = connectedRepos(), w = want.toLowerCase();
+      const hit = list.find((r) => r.toLowerCase() === w) || list.find((r) => r.split('/')[1].toLowerCase() === w);
+      if (!hit) throw new Error(want + ' is not connected. Connected repos: ' + list.join(', ') + '. The user can add repos in ⚙️ Settings.');
+      return hit;
     }
-    async function readRef(signal) {
-      const b = await getBranchState(signal);
+    // "Jumble: " in front of transcript lines, once there's more than one repo.
+    const tag = (repo) => (connectedRepos().length > 1 ? repo.split('/')[1] + ': ' : '');
+
+    // Work branch, per repo: read from it once it exists; create it from the
+    // default branch on the first write.
+    const branchStates = new Map();   // repo -> { base, exists }
+    const resetBranches = () => branchStates.clear();
+    async function getBranchState(repo, signal) {
+      let b = branchStates.get(repo);
+      if (b) return b;
+      const info = await ghFetch(repo, '', null, signal);
+      let exists = true;
+      try { await ghFetch(repo, '/git/ref/heads/' + encodePath(gh.branch), null, signal); }
+      catch (e) { if (e.status === 404) exists = false; else throw e; }
+      b = { base: info.default_branch, exists };
+      branchStates.set(repo, b);
+      return b;
+    }
+    async function readRef(repo, signal) {
+      const b = await getBranchState(repo, signal);
       return b.exists ? gh.branch : b.base;
     }
-    async function ensureBranch(signal) {
-      const b = await getBranchState(signal);
+    async function ensureBranch(repo, signal) {
+      const b = await getBranchState(repo, signal);
       // Safety rail: never commit to the default branch unless you've turned that on.
       if (gh.branch === b.base && !gh.allowDefault) {
-        throw new Error('Not committing: ' + gh.branch + ' is the default branch, and Pace is set to work on a ' +
-          'separate branch. Ask the user to clear the Work branch field in Settings (so it uses "pace"), or to ' +
+        throw new Error('Not committing: ' + gh.branch + ' is the default branch of ' + repo + ', and Pace is set to ' +
+          'work on a separate branch. Ask the user to clear the Work branch field in Settings (so it uses "pace"), or to ' +
           'turn on "Allow commits straight to the default branch".');
       }
       if (b.exists) return;
-      const base = await ghFetch('/git/ref/heads/' + encodePath(b.base), null, signal);
-      await ghFetch('/git/refs', { method: 'POST', body: { ref: 'refs/heads/' + gh.branch, sha: base.object.sha } }, signal);
+      const base = await ghFetch(repo, '/git/ref/heads/' + encodePath(b.base), null, signal);
+      await ghFetch(repo, '/git/refs', { method: 'POST', body: { ref: 'refs/heads/' + gh.branch, sha: base.object.sha } }, signal);
       b.exists = true;
-      addLine('tool', '🌿 Created branch ' + gh.branch + ' from ' + b.base);
+      addLine('tool', '🌿 ' + tag(repo) + 'Created branch ' + gh.branch + ' from ' + b.base);
+    }
+    async function headSha(repo, branch, signal) {
+      return (await ghFetch(repo, '/git/ref/heads/' + encodePath(branch), null, signal)).object.sha;
     }
 
     function fromBase64(b64) {
@@ -1815,12 +1936,12 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     }
 
     // Fetch one file: { text, sha } (or null if it doesn't exist and allowMissing).
-    async function getFile(path, ref, signal, allowMissing) {
+    async function getFile(repo, path, ref, signal, allowMissing) {
       let data;
-      try { data = await ghFetch('/contents/' + encodePath(path) + '?ref=' + encodeURIComponent(ref), null, signal); }
+      try { data = await ghFetch(repo, '/contents/' + encodePath(path) + '?ref=' + encodeURIComponent(ref), null, signal); }
       catch (e) {
         if (e.status === 404 && allowMissing) return null;
-        if (e.status === 404) throw new Error(path + ' does not exist on ' + ref + '. Use list_files to see the real paths.');
+        if (e.status === 404) throw new Error(path + ' does not exist on ' + ref + ' in ' + repo + '. Use list_files to see the real paths.');
         throw e;
       }
       if (Array.isArray(data) || data.type !== 'file') throw new Error(path + ' is a folder, not a file.');
@@ -1830,22 +1951,129 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       return { text, sha: data.sha };
     }
 
-    async function putFile(path, text, message, sha, signal) {
-      const data = await ghFetch('/contents/' + encodePath(path), {
+    async function putFile(repo, path, text, message, sha, signal) {
+      const data = await ghFetch(repo, '/contents/' + encodePath(path), {
         method: 'PUT',
         body: { message, content: toBase64(text), branch: gh.branch, ...(sha ? { sha } : {}) },
       }, signal);
       return data.commit.sha.slice(0, 7);
     }
 
+    // ---- Builds across repos ----
+    async function readBuildStatus(repo, signal) {
+      const f = await getFile(repo, 'status.json', gh.branch + '-builds', signal, true);
+      if (!f || !f.text) return null;
+      try { return JSON.parse(f.text.replace(/^﻿/, '')); } catch { return null; }
+    }
+    // The build reports which commit of each other repo it compiled against
+    // (status.deps). Names of the ones that have moved on since.
+    async function staleDeps(s, signal) {
+      const stale = [];
+      for (const [dep, info] of Object.entries(s.deps || {})) {
+        if (!info || !info.sha) continue;
+        try {
+          let cur;
+          try { cur = await headSha(dep, gh.branch, signal); }
+          catch (e) {
+            if (e.status !== 404) throw e;
+            cur = await headSha(dep, (await ghFetch(dep, '', null, signal)).default_branch, signal);
+          }
+          if (cur !== info.sha) stale.push(dep.split('/')[1] || dep);
+        } catch (e) {
+          if (signal.aborted) throw e;   // otherwise the token can't see that repo: skip it
+        }
+      }
+      return stale;
+    }
+    const depsNote = (s) => {
+      const list = Object.entries(s.deps || {}).filter(([, d]) => d && d.sha)
+        .map(([name, d]) => name.split('/')[1] + ' ' + d.ref + ' (' + d.sha.slice(0, 7) + ')');
+      return list.length ? ' Built against ' + list.join(', ') + '.' : '';
+    };
+    // A commit with no changes: pushing it starts a fresh build.
+    async function emptyCommit(repo, parent, message, signal) {
+      const c = await ghFetch(repo, '/git/commits/' + parent, null, signal);
+      const n = await ghFetch(repo, '/git/commits', { method: 'POST', body: { message, tree: c.tree.sha, parents: [parent] } }, signal);
+      await ghFetch(repo, '/git/refs/heads/' + encodePath(gh.branch), { method: 'PATCH', body: { sha: n.sha } }, signal);
+      return n.sha;
+    }
+    async function hasWorkflow(repo, signal) {
+      return !!(await getFile(repo, BUILD_WORKFLOW, await readRef(repo, signal), signal, true));
+    }
+
+    // ---- Git ----
+    // On-screen yes/no for things only the user may decide. Claude can't answer it.
+    function askConfirm(title, text, okLabel, signal) {
+      const dlg = $('confirmDialog');
+      $('confirmTitle').textContent = title;
+      $('confirmText').textContent = text;
+      $('confirmOk').textContent = okLabel;
+      return new Promise((resolve) => {
+        let settled = false;
+        const finish = (v) => {
+          if (settled) return;
+          settled = true;
+          $('confirmOk').removeEventListener('click', yes);
+          $('confirmCancel').removeEventListener('click', no);
+          dlg.removeEventListener('close', no);
+          signal.removeEventListener('abort', no);
+          if (dlg.open) dlg.close();
+          resolve(v);
+        };
+        const yes = () => finish(true), no = () => finish(false);
+        $('confirmOk').addEventListener('click', yes);
+        $('confirmCancel').addEventListener('click', no);
+        dlg.addEventListener('close', no);
+        signal.addEventListener('abort', no, { once: true });
+        dlg.showModal();
+      });
+    }
+
+    function describeCompare(c, base, head) {
+      const lines = [head + ' is ' + c.ahead_by + ' commit(s) ahead of ' + base + ' and ' + c.behind_by + ' behind.'];
+      const commits = c.commits || [];
+      if (commits.length) {
+        lines.push('', 'Commits on ' + head + ':');
+        commits.slice(-30).forEach((x) => lines.push('  ' + x.sha.slice(0, 7) + ' ' + x.commit.message.split('\n')[0]));
+        if (commits.length > 30) lines.push('  …and ' + (commits.length - 30) + ' earlier');
+      }
+      const files = c.files || [];
+      if (files.length) {
+        lines.push('', 'Files changed (' + files.length + '):');
+        files.forEach((f) => lines.push('  ' + f.status + ' ' + f.filename + ' +' + f.additions + ' -' + f.deletions));
+        let budget = 30000;
+        const diffs = [];
+        for (const f of files) {
+          if (!f.patch) continue;
+          const piece = '--- ' + f.filename + '\n' + f.patch;
+          if (piece.length > budget) { diffs.push('…(the rest of the diffs were cut off; read the files to see them)'); break; }
+          diffs.push(piece);
+          budget -= piece.length;
+        }
+        if (diffs.length) lines.push('', 'Diffs:', diffs.join('\n\n'));
+      }
+      return lines.join('\n');
+    }
+
+    // Files changed on both sides since the branches split: where a merge conflicts.
+    async function bothChanged(repo, base, head, signal) {
+      const [a, b] = await Promise.all([
+        ghFetch(repo, '/compare/' + encodePath(base) + '...' + encodePath(head), null, signal),
+        ghFetch(repo, '/compare/' + encodePath(head) + '...' + encodePath(base), null, signal),
+      ]);
+      const ours = new Set((a.files || []).map((f) => f.filename));
+      return (b.files || []).map((f) => f.filename).filter((f) => ours.has(f));
+    }
+
     const TOOL_RUNNERS = {
       async list_files(input, signal) {
-        const ref = await readRef(signal);
-        const tree = await ghFetch('/git/trees/' + encodeURIComponent(ref) + '?recursive=1', null, signal);
+        const repo = pickRepo(input);
+        const ref = await readRef(repo, signal);
+        const tree = await ghFetch(repo, '/git/trees/' + encodeURIComponent(ref) + '?recursive=1', null, signal);
         let paths = tree.tree.filter((t) => t.type === 'blob').map((t) => t.path);
         const dir = (input.path || '').replace(/^\/+|\/+$/g, '');
         if (dir) paths = paths.filter((p) => p === dir || p.startsWith(dir + '/'));
-        addLine('tool', '📂 Listed ' + (dir || 'files') + ' (' + paths.length + ')');
+        addLine('tool', '📂 ' + tag(repo) + 'Listed ' + (dir || 'files') + ' (' + paths.length + ')');
         const shown = paths.slice(0, 3000);
         let text = shown.join('\n') || '(no files)';
         if (paths.length > shown.length) text += '\n…and ' + (paths.length - shown.length) + ' more. Pass a folder path to narrow it.';
@@ -1854,11 +2082,12 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       },
 
       async read_file(input, signal) {
-        const ref = await readRef(signal);
-        const f = await getFile(input.path, ref, signal);
+        const repo = pickRepo(input);
+        const ref = await readRef(repo, signal);
+        const f = await getFile(repo, input.path, ref, signal);
         if (f.tooBig) throw new Error(input.path + ' is over 1 MB, too large to open here.');
         if (f.binary) throw new Error(input.path + ' is a binary file.');
-        addLine('tool', '📄 Read ' + input.path);
+        addLine('tool', '📄 ' + tag(repo) + 'Read ' + input.path);
         let text = f.text;
         if (text.length > MAX_FILE_CHARS) {
           text = text.slice(0, MAX_FILE_CHARS) + '\n…[file cut off after ' + MAX_FILE_CHARS + ' characters]';
@@ -1867,8 +2096,9 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       },
 
       async edit_file(input, signal) {
-        await ensureBranch(signal);
-        const f = await getFile(input.path, gh.branch, signal);
+        const repo = pickRepo(input);
+        await ensureBranch(repo, signal);
+        const f = await getFile(repo, input.path, gh.branch, signal);
         if (f.tooBig || f.binary) throw new Error(input.path + ' can\'t be edited here (too large or binary).');
         let oldText = input.old_text, newText = input.new_text;
         let count = f.text.split(oldText).length - 1;
@@ -1883,56 +2113,177 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         if (count > 1) throw new Error('old_text appears ' + count + ' times in ' + input.path + '. Include more surrounding lines so it matches once.');
         const i = f.text.indexOf(oldText);
         const updated = f.text.slice(0, i) + newText + f.text.slice(i + oldText.length);
-        const commit = await putFile(input.path, updated, input.message, f.sha, signal);
-        addLine('tool', '✏️ Edited ' + input.path + ' (' + commit + ')');
-        return { text: 'Edited ' + input.path + '. Commit ' + commit + ' on ' + gh.branch + '.', wrote: true };
+        const commit = await putFile(repo, input.path, updated, input.message, f.sha, signal);
+        addLine('tool', '✏️ ' + tag(repo) + 'Edited ' + input.path + ' (' + commit + ')');
+        return { text: 'Edited ' + input.path + '. Commit ' + commit + ' on ' + gh.branch + ' in ' + repo + '.', wrote: repo };
       },
 
       async write_file(input, signal) {
-        await ensureBranch(signal);
-        const existing = await getFile(input.path, gh.branch, signal, true);
+        const repo = pickRepo(input);
+        await ensureBranch(repo, signal);
+        const existing = await getFile(repo, input.path, gh.branch, signal, true);
         let content = input.content;
         // Keep Windows line endings if the file had them.
         if (existing && existing.text && existing.text.includes('\r\n') && !content.includes('\r')) {
           content = content.replace(/\n/g, '\r\n');
         }
-        const commit = await putFile(input.path, content, input.message, existing && existing.sha, signal);
-        addLine('tool', (existing ? '💾 Rewrote ' : '🆕 Created ') + input.path + ' (' + commit + ')');
-        return { text: (existing ? 'Replaced ' : 'Created ') + input.path + '. Commit ' + commit + ' on ' + gh.branch + '.', wrote: true };
+        const commit = await putFile(repo, input.path, content, input.message, existing && existing.sha, signal);
+        addLine('tool', (existing ? '💾 ' : '🆕 ') + tag(repo) + (existing ? 'Rewrote ' : 'Created ') + input.path + ' (' + commit + ')');
+        return { text: (existing ? 'Replaced ' : 'Created ') + input.path + '. Commit ' + commit + ' on ' + gh.branch + ' in ' + repo + '.', wrote: repo };
       },
 
       async delete_file(input, signal) {
-        await ensureBranch(signal);
-        const f = await getFile(input.path, gh.branch, signal);
-        const data = await ghFetch('/contents/' + encodePath(input.path), {
+        const repo = pickRepo(input);
+        await ensureBranch(repo, signal);
+        const f = await getFile(repo, input.path, gh.branch, signal);
+        const data = await ghFetch(repo, '/contents/' + encodePath(input.path), {
           method: 'DELETE', body: { message: input.message, sha: f.sha, branch: gh.branch },
         }, signal);
         const commit = data.commit.sha.slice(0, 7);
-        addLine('tool', '🗑️ Deleted ' + input.path + ' (' + commit + ')');
-        return { text: 'Deleted ' + input.path + '. Commit ' + commit + ' on ' + gh.branch + '.', wrote: true };
+        addLine('tool', '🗑️ ' + tag(repo) + 'Deleted ' + input.path + ' (' + commit + ')');
+        return { text: 'Deleted ' + input.path + '. Commit ' + commit + ' on ' + gh.branch + ' in ' + repo + '.', wrote: repo };
       },
 
       async check_build(input, signal) {
-        const b = await getBranchState(signal);
-        if (!b.exists) return { text: 'Nothing to build yet: branch ' + gh.branch + ' does not exist because no changes have been made.' };
-        if (!(await getFile(BUILD_WORKFLOW, gh.branch, signal, true))) {
-          return { text: 'No build is set up for this repo (' + BUILD_WORKFLOW + ' is missing on ' + gh.branch + '), so the code cannot be compiled here.' };
+        const repo = pickRepo(input);
+        const b = await getBranchState(repo, signal);
+        if (!(await hasWorkflow(repo, signal))) {
+          const others = [];
+          for (const r of connectedRepos()) {
+            if (r === repo) continue;
+            try { if (await hasWorkflow(r, signal)) others.push(r); } catch (e) { if (signal.aborted) throw e; }
+          }
+          return { text: others.length
+            ? 'No build is set up in ' + repo + ' itself. ' + others[0] + ' has one, and it compiles against the other connected repos (their ' + gh.branch + ' branch when it exists). Call check_build with repo "' + others[0] + '".'
+            : 'No build is set up for ' + repo + ' (' + BUILD_WORKFLOW + ' is missing), so the code cannot be compiled here.' };
         }
-        const head = await ghFetch('/git/ref/heads/' + encodePath(gh.branch), null, signal);
-        const sha = head.object.sha, short = sha.slice(0, 7);
-        addLine('tool', '🔨 Building ' + gh.branch + ' (' + short + ')…');
-        const deadline = Date.now() + BUILD_WAIT_MS;
+        if (!b.exists) {
+          // Nothing changed here, but maybe in a repo this one builds against.
+          let elsewhere = false;
+          for (const r of connectedRepos()) {
+            if (r !== repo && (await getBranchState(r, signal).catch(() => ({}))).exists) elsewhere = true;
+          }
+          if (!elsewhere) return { text: 'Nothing to build yet: there are no changes on ' + gh.branch + ' in any connected repo.' };
+          await ensureBranch(repo, signal);   // creating the branch starts a build
+        }
+        let sha = await headSha(repo, gh.branch, signal);
+        addLine('tool', '🔨 ' + tag(repo) + 'Building ' + gh.branch + ' (' + sha.slice(0, 7) + ')…');
+        let deadline = Date.now() + BUILD_WAIT_MS, rebuilt = false;
         for (;;) {
-          const f = await getFile('status.json', gh.branch + '-builds', signal, true);
-          let s = null;
-          if (f && f.text) { try { s = JSON.parse(f.text.replace(/^\uFEFF/, '')); } catch { s = null; } }
-          if (s && s.sha === sha) return buildReport(s, short);
+          const s = await readBuildStatus(repo, signal);
+          if (s && s.sha === sha) {
+            // Built, but against an older commit of another repo (say only the
+            // engine changed since): build again with the latest.
+            const stale = rebuilt ? [] : await staleDeps(s, signal);
+            if (!stale.length) {
+              const r = buildReport(s, sha.slice(0, 7));
+              r.text += depsNote(s);
+              return r;
+            }
+            sha = await emptyCommit(repo, sha, 'Rebuild with the latest ' + stale.join(', ') + ' (Pace)', signal);
+            rebuilt = true;
+            deadline = Date.now() + BUILD_WAIT_MS;
+            addLine('tool', '🔁 ' + tag(repo) + 'Rebuilding with the latest ' + stale.join(', ') + ' (' + sha.slice(0, 7) + ')…');
+            continue;
+          }
           if (Date.now() > deadline) {
-            addLine('tool', '⏳ Build still not finished (' + short + ')');
-            return { text: 'The build of ' + short + ' had not finished after 12 minutes. Tell the user to check the Actions tab: https://github.com/' + gh.repo + '/actions' };
+            addLine('tool', '⏳ Build still not finished (' + sha.slice(0, 7) + ')');
+            return { text: 'The build of ' + sha.slice(0, 7) + ' had not finished after 12 minutes. Tell the user to check the Actions tab: https://github.com/' + repo + '/actions' };
           }
           await sleep(BUILD_POLL_MS, signal);
         }
+      },
+
+      async list_branches(input, signal) {
+        const repo = pickRepo(input);
+        const b = await getBranchState(repo, signal);
+        const list = await ghFetch(repo, '/branches?per_page=100', null, signal);
+        addLine('tool', '🌿 ' + tag(repo) + 'Listed branches (' + list.length + ')');
+        return { text: list.map((x) => x.name + (x.name === b.base ? ' (default)' : '') +
+          (x.name === gh.branch ? ' (work branch)' : '') + (x.protected ? ' (protected)' : '')).join('\n') || '(no branches)' };
+      },
+
+      async git_log(input, signal) {
+        const repo = pickRepo(input);
+        const branch = input.branch || await readRef(repo, signal);
+        const n = Math.min(50, Math.max(1, parseInt(input.count, 10) || 15));
+        const list = await ghFetch(repo, '/commits?sha=' + encodeURIComponent(branch) + '&per_page=' + n, null, signal);
+        addLine('tool', '📜 ' + tag(repo) + 'History of ' + branch);
+        return { text: list.map((c) => {
+          const a = c.commit.author || {};
+          return c.sha.slice(0, 7) + ' ' + (a.date || '').slice(0, 10) + ' ' + (a.name || '?') + ': ' + c.commit.message.split('\n')[0];
+        }).join('\n') || '(no commits)' };
+      },
+
+      async compare_branches(input, signal) {
+        const repo = pickRepo(input);
+        const b = await getBranchState(repo, signal);
+        const base = input.base || b.base, head = input.head || gh.branch;
+        if (!input.head && !b.exists) return { text: 'The work branch ' + gh.branch + ' does not exist in ' + repo + ' yet, so there is nothing to compare.' };
+        const c = await ghFetch(repo, '/compare/' + encodePath(base) + '...' + encodePath(head), null, signal);
+        addLine('tool', '🔍 ' + tag(repo) + 'Compared ' + head + ' with ' + base);
+        return { text: describeCompare(c, base, head) };
+      },
+
+      async merge_branch(input, signal) {
+        const repo = pickRepo(input);
+        const b = await getBranchState(repo, signal);
+        const base = input.base || b.base, head = input.head || gh.branch;
+        if (base === head) throw new Error('base and head are the same branch (' + base + ').');
+        if (head === gh.branch && !b.exists) return { text: 'The work branch ' + gh.branch + ' does not exist in ' + repo + ' yet, so there is nothing to merge.' };
+        // Your default branch changes only when you tap Merge yourself.
+        if (base === b.base) {
+          addLine('tool', '❓ ' + tag(repo) + 'Waiting for you to confirm the merge on screen');
+          const ok = await askConfirm('Merge into ' + base + '?',
+            'Claude wants to merge ' + head + ' into ' + base + ' in ' + repo + '. This changes your default branch.', 'Merge', signal);
+          if (signal.aborted) throw signal.reason || new Error('Aborted');
+          if (!ok) {
+            addLine('tool', '✋ Merge cancelled');
+            return { text: 'The user tapped Cancel, so nothing was merged. Do not try again unless they ask.' };
+          }
+        }
+        let data;
+        try {
+          data = await ghFetch(repo, '/merges', { method: 'POST',
+            body: { base, head, ...(input.message ? { commit_message: input.message } : {}) } }, signal);
+        } catch (e) {
+          if (e.status === 409) {
+            const files = await bothChanged(repo, base, head, signal).catch(() => []);
+            addLine('tool', '⚠️ ' + tag(repo) + 'Merge conflict: ' + head + ' into ' + base);
+            return { text: 'Merge conflict: GitHub could not merge ' + head + ' into ' + base + ' automatically, so nothing changed.' +
+              (files.length ? ' Files changed on both branches: ' + files.join(', ') + '.' : '') +
+              ' Tell the user. They can resolve it in a pull request on GitHub or in Visual Studio.' };
+          }
+          if (e.status === 404) throw new Error('Branch ' + base + ' or ' + head + ' was not found in ' + repo + '.');
+          throw e;
+        }
+        if (!data) {
+          addLine('tool', '🔀 ' + tag(repo) + base + ' already has everything in ' + head);
+          return { text: 'Nothing to merge: ' + base + ' already contains everything in ' + head + '.' };
+        }
+        const short = data.sha.slice(0, 7);
+        addLine('tool', '🔀 ' + tag(repo) + 'Merged ' + head + ' into ' + base + ' (' + short + ')');
+        return { text: 'Merged ' + head + ' into ' + base + ' in ' + repo + '. Merge commit ' + short + '.', wrote: base === gh.branch ? repo : '' };
+      },
+
+      async open_pull_request(input, signal) {
+        const repo = pickRepo(input);
+        const b = await getBranchState(repo, signal);
+        const base = input.base || b.base, head = input.head || gh.branch;
+        let pr;
+        try {
+          pr = await ghFetch(repo, '/pulls', { method: 'POST', body: { title: input.title, body: input.body || '', base, head } }, signal);
+        } catch (e) {
+          if (e.status === 403) throw new Error('The GitHub token is not allowed to open pull requests. The user can allow it by editing the token on GitHub and setting Pull requests: Read and write. Or use merge_branch.');
+          if (e.status === 422) {
+            const why = ((e.data && e.data.errors) || []).map((x) => x.message).filter(Boolean).join('; ');
+            throw new Error('GitHub would not open it' + (why ? ': ' + why : '') + '. A pull request for these branches may already exist, or they may have no differences.');
+          }
+          throw e;
+        }
+        addLine('tool', '📬 ' + tag(repo) + 'Opened pull request #' + pr.number);
+        addLine('info', 'Pull request #' + pr.number + ':', pr.html_url);
+        return { text: 'Opened pull request #' + pr.number + ' (' + head + ' into ' + base + '): ' + pr.html_url };
       },
     };
 
@@ -2433,6 +2784,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     function saveSettings() {
       store.set('pace-effort', effort);
       saveOrDelete('pace-gh-repo', gh.repo);
+      saveOrDelete('pace-gh-extra', gh.extra.length ? JSON.stringify(gh.extra) : '');
       saveOrDelete('pace-gh-branch', gh.branch === DEFAULT_BRANCH ? '' : gh.branch);
       saveOrDelete('pace-gh-allow-default', gh.allowDefault ? '1' : '');
       saveOrDelete('pace-lifeline-url', lifeline.url);
@@ -2451,6 +2803,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       keyInput.placeholder = savedHint(apiKey, 'sk-ant-…');
       effortInput.value = effort;
       ghRepoInput.value = gh.repo;
+      $('ghExtraInput').value = gh.extra.join(', ');
       ghBranchInput.value = gh.branch === DEFAULT_BRANCH ? '' : gh.branch;
       ghTokenInput.value = '';
       ghTokenInput.placeholder = savedHint(gh.token, 'github_pat_…');
@@ -2478,10 +2831,17 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
 
     $('settingsForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const repo = ghRepoInput.value.trim()
-        .replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '');
-      if (repo && !/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-        showStatus('The repo should look like owner/name, for example liujerry7/Pace.', true);
+      const repo = cleanRepo(ghRepoInput.value);
+      const extra = $('ghExtraInput').value.split(/[\s,]+/).map(cleanRepo).filter(Boolean)
+        .filter((r, i, a) => r.toLowerCase() !== repo.toLowerCase() && a.findIndex((x) => x.toLowerCase() === r.toLowerCase()) === i);
+      const badRepo = [repo, ...extra].find((r) => r && !/^[\w.-]+\/[\w.-]+$/.test(r));
+      if (badRepo !== undefined) {
+        showStatus('"' + badRepo + '" should look like owner/name, for example liujerry7/Pace.', true);
+        settingsEl.close();
+        return;
+      }
+      if (extra.length && !repo) {
+        showStatus('Fill in Repository first: other repos go alongside a main one.', true);
         settingsEl.close();
         return;
       }
@@ -2502,13 +2862,14 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       apiKey = keyInput.value.trim() || apiKey;
       effort = effortInput.value;
       // Anything that changes Claude's tools starts a fresh conversation.
-      const toolsKey = () => [gh.repo, gh.branch, codingOn(), lifeline.url, lifeline.writes].join('|');
+      const toolsKey = () => [gh.repo, gh.extra.join(','), gh.branch, codingOn(), lifeline.url, lifeline.writes].join('|');
       const before = toolsKey();
       codeLang = $('langInput').value;
       lifeline.url = llUrl;
       lifeline.token = $('llTokenInput').value.trim() || (llUrl ? lifeline.token : '');
       lifeline.writes = $('llWritesInput').checked;
       gh.repo = repo;
+      gh.extra = extra;
       gh.branch = ghBranchInput.value.trim() || DEFAULT_BRANCH;
       gh.token = ghTokenInput.value.trim() || gh.token;
       gh.allowDefault = $('allowDefaultInput').checked;
@@ -2530,8 +2891,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
 
       if (before !== toolsKey()) {
         clearConversation();
-        branchState = null;
-        if (codingOn()) addLine('info', 'Connected to ' + gh.repo + '. Changes go to branch ' + gh.branch + '.');
+        resetBranches();
+        if (codingOn()) addLine('info', 'Connected to ' + connectedRepos().join(' and ') + '. Changes go to branch ' + gh.branch + '.');
         if (lifelineOn()) addLine('info', 'Lifeline connected' + (lifeline.writes ? '.' : ' (read only).'));
       }
       showStatus(
@@ -2896,7 +3257,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
 
     async function makeSetupLink(code) {
       const setup = {
-        v: 1, t: Date.now(), apiKey, ghToken: gh.token, repo: gh.repo, branch: gh.branch,
+        v: 1, t: Date.now(), apiKey, ghToken: gh.token, repo: gh.repo, extra: gh.extra, branch: gh.branch,
         allowDefault: gh.allowDefault, effort, recent: recentRepos(), lang: codeLang,
         lifelineUrl: lifeline.url, lifelineToken: lifeline.token, lifelineWrites: lifeline.writes,
       };
@@ -2932,6 +3293,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       apiKey = setup.apiKey || '';
       gh.token = setup.ghToken || '';
       gh.repo = setup.repo || '';
+      gh.extra = Array.isArray(setup.extra) ? setup.extra.filter((r) => typeof r === 'string') : [];
       gh.branch = setup.branch || DEFAULT_BRANCH;
       gh.allowDefault = !!setup.allowDefault;
       effort = setup.effort || effort;
@@ -2950,7 +3312,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         vaultSalt = null;
       }
       await saveSecrets();
-      branchState = null;
+      resetBranches();
       clearConversation();
     }
 
