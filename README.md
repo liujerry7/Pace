@@ -98,7 +98,7 @@ Then just ask: "add a dark mode toggle to the settings page." Claude lists and r
 **Watching changes live on your computer:** Pace commits on GitHub, not on your disk. `tools/pace-sync.ps1` pulls each new commit into your local clones within a few seconds and lists what changed. Visual Studio then reloads the files; to skip its prompt, turn on Tools → Options → Environment → Documents → *Reload modified files unless there are unsaved changes*. Put each clone on the work branch first (commit or stash your own changes, then `git switch pace`), then run:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File D:\WebDev\Pace	ools\pace-sync.ps1 D:\GameDev\PlaygroundTopDown2D D:\GameDev\Jumble
+powershell -ExecutionPolicy Bypass -File D:\WebDev\Pace\tools\pace-sync.ps1 D:\GameDev\PlaygroundTopDown2D D:\GameDev\Jumble
 ```
 
 It only fast-forwards. It never merges, stashes or overwrites your work. If you have uncommitted edits to a file Pace changed, or local commits of your own, it says so and waits until you've dealt with them. Ctrl+C stops it.
