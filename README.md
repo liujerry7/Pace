@@ -18,6 +18,8 @@ Code in replies is shown on screen but not read aloud. **Clear** also starts a f
 
 **Mic trouble:** under the mic button, Pace shows "Starting the mic…", then "Go ahead, I'm listening…" once it actually hears audio, and "Hearing you…" when you speak. If the mic never starts, or hears nothing twice in a row, it says so. On iPhone, use Safari.
 
+**Typing, and Chrome on iPhone:** the box above the mic button takes typed messages (Enter sends, Shift+Enter adds a line), handled just like spoken ones. In browsers that can't give web pages the mic, such as Chrome on iPhone, use it with your keyboard's own mic key: tap the box, tap the keyboard's 🎤, talk, then send. Claude still answers out loud. Hands-free mode needs Safari on iPhone, or Chrome on a computer or Android. Typing during a hands-free conversation ends it.
+
 ## Building without a repo
 With no repo connected, Claude works on a small set of files kept in this browser. Ask for something like "make a snake game" or "write a palindrome checker and test it". The transcript shows each step, and the **folder icon** at the top opens the files. HTML files have **Preview**, which runs the page inside Pace in a sandbox with no network access. Every file has **Download**.
 
@@ -92,6 +94,14 @@ Then just ask: "add a dark mode toggle to the settings page." Claude lists and r
 **Several repos at once:** put the main repo in **Repository** and the others in **Other repos** (comma separated), e.g. `liujerry7/PlaygroundTopDown2D` plus `liujerry7/Jumble`. Claude can then read and change all of them in one chat; each gets its own `pace` branch, and the transcript prefixes each step with the repo's name. The token needs access to each one: on GitHub, open the token, *Edit*, and add the repo under **Only select repositories**. The token's value doesn't change, so there's nothing to paste again. Recent repos are suggested as you type.
 
 **Building with an engine in another repo:** the game's build checks out Jumble from its `pace` branch when that exists (Claude's engine changes), else from Jumble's default branch, and records which Jumble commit it used. If only Jumble changed since the game last built, `check_build` pushes an empty commit to the game's `pace` branch to build again with the new engine. This needs the `JUMBLE_DEPLOY_KEY` secret on the game repo (a read-only deploy key on Jumble).
+
+**Watching changes live on your computer:** Pace commits on GitHub, not on your disk. `tools/pace-sync.ps1` pulls each new commit into your local clones within a few seconds and lists what changed. Visual Studio then reloads the files; to skip its prompt, turn on Tools → Options → Environment → Documents → *Reload modified files unless there are unsaved changes*. Put each clone on the work branch first (commit or stash your own changes, then `git switch pace`), then run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File D:\WebDev\Pace	ools\pace-sync.ps1 D:\GameDev\PlaygroundTopDown2D D:\GameDev\Jumble
+```
+
+It only fast-forwards. It never merges, stashes or overwrites your work. If you have uncommitted edits to a file Pace changed, or local commits of your own, it says so and waits until you've dealt with them. Ctrl+C stops it.
 
 **Git:** Claude can list branches, show history, compare the work branch with `main` (commits and diffs), pull, merge, resolve conflicts and open pull requests.
 - **Push:** there's no separate step. Every change Claude makes is committed straight to the work branch on GitHub. To get it on your computer, pull the `pace` branch there (Git → Pull in Visual Studio).

@@ -250,6 +250,24 @@
       overflow-wrap: anywhere;
     }
     #live:empty::before { content: attr(data-placeholder); color: var(--faint); font-size: 15px; font-weight: 400; }
+    .type-bar { display: flex; align-items: flex-end; gap: 8px; max-width: 600px; margin: 0 auto 12px; }
+    .type-bar textarea {
+      flex: 1;
+      min-height: 42px;
+      max-height: 140px;
+      resize: none;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 21px;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 16px;   /* 16px or more: iPhone doesn't zoom in on focus */
+      line-height: 1.35;
+    }
+    .type-bar textarea:focus { outline: none; border-color: var(--accent); }
+    .type-bar textarea::placeholder { color: var(--faint); }
+    .type-bar .icon-btn { width: 42px; height: 42px; flex: none; }
     .controls { display: flex; align-items: center; justify-content: center; gap: 32px; }
     .controls .icon-btn { width: 46px; height: 46px; }
 
@@ -497,6 +515,15 @@
     <footer class="dock">
       <!-- What is being heard right now -->
       <div id="live" aria-live="polite" data-placeholder=""></div>
+      <!-- Typing works in every browser, and the keyboard's own mic key dictates into it
+           (the way to talk to Pace in Chrome on iPhone, which has no speech recognition). -->
+      <form id="typeForm" class="type-bar" autocomplete="off">
+        <textarea id="typeInput" rows="1" enterkeyhint="send" spellcheck="false" autocapitalize="sentences"
+          aria-label="Message" placeholder="Type, or tap the keyboard's mic to dictate"></textarea>
+        <button id="typeSend" class="icon-btn" type="submit" aria-label="Send">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+      </form>
       <div class="controls">
         <button id="copy" class="icon-btn" type="button" aria-label="Copy conversation">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -1152,6 +1179,36 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       askClaude(text);
       return true;
     }
+
+    // ---- Typing (or the keyboard's dictation key) ----
+    const typeInput = $('typeInput');
+    function fitTypeInput() {
+      typeInput.style.height = 'auto';
+      typeInput.style.height = Math.min(typeInput.scrollHeight + 2, 140) + 'px';
+    }
+    typeInput.addEventListener('input', fitTypeInput);
+    // Enter sends; Shift+Enter is a new line (for pasting or typing code).
+    typeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        $('typeForm').requestSubmit();
+      }
+    });
+    $('typeForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = typeInput.value.trim();
+      if (!text) return;
+      if (turnActive) {
+        showStatus('Claude is still working. Tap the mic button to interrupt, then send.');
+        return;
+      }
+      if (isLocked()) return;
+      primeSpeech();                               // this tap lets the reply be spoken on iPhone
+      if (conversationOn) stopConversation();      // typing takes over from hands-free
+      typeInput.value = '';
+      fitTypeInput();
+      addTranscriptLine(text);
+    });
 
     // ---- Drawing lines. Everything uses textContent, so nothing from the
     //      model can inject HTML. Code blocks (```...```) become <pre> boxes.
@@ -2644,12 +2701,9 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
 
     if (!SpeechRecognition) {
       talkBtn.disabled = true;
-      talkLabel.textContent = 'Voice input not supported here';
-      showStatus(
-        'Sorry, this browser does not support speech recognition. ' +
-        'Use Chrome on a computer or Android, or Safari on iPhone.',
-        true
-      );
+      talkLabel.textContent = 'Type below';
+      showStatus('This browser has no voice input for web pages. Type below, or tap the mic on your keyboard ' +
+        'to dictate; Claude still answers out loud.');
     } else {
       recognition = new SpeechRecognition();
       recognition.lang = 'en-US';
@@ -2745,7 +2799,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       startWatchdog = setTimeout(() => {
         if (!recRunning || audioStarted) return;
         showStatus(OTHER_IOS_BROWSER
-          ? 'On iPhone, voice input only works reliably in Safari. Open Pace in Safari.'
+          ? 'This browser on iPhone can’t give Pace the mic. Use the box below: tap the mic on your keyboard and ' +
+            'talk, then send. (Safari has hands-free voice.)'
           : 'The microphone hasn’t started. Check that this site may use the mic and that no other app is using it.', true);
       }, 4000);
     }
