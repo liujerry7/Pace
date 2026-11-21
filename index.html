@@ -548,7 +548,13 @@
               <option value="python">Python</option>
             </select>
           </div>
-        </section>
+          <div class="field">
+            <label for="writeModeInput">Who writes the code</label>
+            <select id="writeModeInput">
+              <option value="dictate">Me: Claude types only what I dictate, unless I say "write it"</option>
+              <option value="write">Claude may write code for my requests</option>
+            </select>
+          </div>
 
         <section>
           <h3>Voice</h3>
@@ -871,12 +877,18 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         'no build is set up, be extra careful with syntax, includes and declarations, and tell ' +
         'the user to build it themselves. Keep each ' +
         'file\'s existing line endings and indentation.' + multiRepoPrompt(repo, branch) +
-        '\n\nYou also have git tools: list_branches, git_log, compare_branches, merge_branch and ' +
-        'open_pull_request. Before merging, use compare_branches and say in a sentence what will go in. ' +
+        '\n\nYou also have git tools: list_branches, git_log, compare_branches, merge_branch, ' +
+        'resolve_conflicts and open_pull_request. There is no separate push: every change you commit is already ' +
+        'on GitHub. To pull (bring the work branch up to date with the default branch), merge the default branch ' +
+        'into the work branch with merge_branch. If the user wants the changes on their own computer, tell them ' +
+        'to pull the work branch there (git pull, or Git > Pull in Visual Studio). ' +
+        'Before merging, use compare_branches and say in a sentence what will go in. ' +
         'Merge into the default branch only when the user asks for it, and only work that built (if the repo has ' +
         'a build). Pace then asks the user to confirm on screen, so say "tap Merge on the screen" right before ' +
-        'you call it. If a merge conflicts, say which files and that they can resolve it in a pull request on ' +
-        'GitHub or in Visual Studio.';
+        'you call it. If a merge conflicts, resolve it on the work branch: read each conflicting file on both ' +
+        'branches and at the common ancestor (read_file with branch), write the combined version of each, keeping ' +
+        'both sides\' intent, and call resolve_conflicts. To merge the work branch into the default branch after a ' +
+        'conflict, first pull the default branch into the work branch that way, build, then merge.';
     }
 
     function multiRepoPrompt(repo, branch) {
@@ -937,6 +949,29 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         ? '\n\nWrite new code and dictated snippets in ' + name + ' unless the user names another language or the repo clearly uses one.'
         : '\n\nUse JavaScript for standalone snippets unless the user names another language or the repo clearly uses one.';
     }
+
+    // Dictation mode (the default): the user writes the code by voice; Claude
+    // types it. Claude writes its own code only when handed the pen.
+    const DICTATION_PROMPT =
+      '\n\nDICTATION MODE (the user\'s setting; it takes priority over the instructions above about writing, ' +
+      'finishing and fixing code). The user writes the code; you type it. Put in only the code the user dictates, ' +
+      'in the file and place they say, turning spoken symbols and names into code and fixing words speech ' +
+      'recognition got wrong. You may add only what the dictation plainly implies: semicolons, closing braces, ' +
+      'and the #include or import for a type they named. Do not add logic, finish functions, add helpers, ' +
+      'comments or error handling, refactor, or fix bugs they did not dictate. If a dictated line is incomplete ' +
+      'or unclear, type what is clear and ask about the rest in one short question; never fill gaps with your own ' +
+      'design. If they ask for a feature without dictating it ("add a dash ability"), ask in one short sentence ' +
+      'whether they will dictate it or want you to write it.\n' +
+      'The user hands you the pen by saying so plainly, for example "write it", "you write it", "write this for ' +
+      'me", "go ahead and implement it" or "write the code for". Then write that one request in full, and go back ' +
+      'to dictation afterwards. Do not treat a description of what they want as permission.\n' +
+      'Everything that is not writing code stays on without asking: reading, searching and explaining code, ' +
+      'building, git (branches, history, compare, pull, merge) and Lifeline. When a build fails, say briefly ' +
+      'what is wrong and where (file, line) and what the fix would be; make the fix only when the user dictates ' +
+      'it or tells you to fix it. For merge conflicts, explain each conflicting file in a sentence and how you ' +
+      'would combine the two sides, and resolve only once the user says to or dictates the result. When a ' +
+      'dictated name breaks the user\'s conventions, type it as dictated and mention the convention once in a ' +
+      'few words instead of renaming it.';
 
     // Lifeline (calendar, projects, time log, docs) through the MCP connector.
     // Reads are always allowed; writes only with the Settings switch; deletes never.
@@ -1040,6 +1075,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     };
     const lifelineOn = () => !!lifeline.url;
     let codeLang = store.get('pace-lang') || 'auto';   // auto | cpp | js | python
+    // dictate (default): Claude types only the code you say, unless you hand it the pen.
+    let writeMode = store.get('pace-write-mode') === 'write' ? 'write' : 'dictate';
 
     const lines = [];     // plain-text log for "Copy all"
     const log = [];       // what's on screen, for saving and reopening chats
@@ -1327,7 +1364,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         stream: true,
         system: BASE_PROMPT + (codingOn() ? codingPrompt(gh.repo, gh.branch) : LOCAL_PROMPT) + EXTRAS_PROMPT +
           SPOKEN_CODE_PROMPT + languagePrompt() + (lifelineOn() ? lifelinePrompt() : '') +
-          (conventionsText() ? conventionsPrompt(conventionsText()) : ''),
+          (conventionsText() ? conventionsPrompt(conventionsText()) : '') +
+          (writeMode === 'dictate' ? DICTATION_PROMPT : ''),
         // Reasoning stays hidden; short progress notes between tool calls come back as text.
         thinking: { type: 'adaptive', display: 'updates' },
         output_config: { effort: effectiveEffort() },
@@ -1626,12 +1664,18 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       {
         name: 'list_files',
         description: 'List the file paths in the repository (on the work branch, or the default branch until the work branch exists). Optionally only under one folder.',
-        input_schema: { type: 'object', properties: { path: str('Folder to list, e.g. "src". Omit for the whole repo.') }, required: [] },
+        input_schema: { type: 'object', properties: {
+          path: str('Folder to list, e.g. "src". Omit for the whole repo.'),
+          branch: str('Branch or commit to list instead. Omit for the work branch.'),
+        }, required: [] },
       },
       {
         name: 'read_file',
         description: 'Read the full text of one file.',
-        input_schema: { type: 'object', properties: { path: str('File path from the repo root, e.g. "src/app.js".') }, required: ['path'] },
+        input_schema: { type: 'object', properties: {
+          path: str('File path from the repo root, e.g. "src/app.js".'),
+          branch: str('Branch or commit sha to read from instead, e.g. "main" or a merge base. Omit for the work branch.'),
+        }, required: ['path'] },
       },
       {
         name: 'edit_file',
@@ -1694,6 +1738,19 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
           head: str('The branch to merge FROM. Omit for the work branch.'),
           message: str('Merge commit message. Optional.'),
         }, required: [] },
+      },
+      {
+        name: 'resolve_conflicts',
+        description: 'Finish a merge that conflicted: merges the "from" branch (default: the default branch) into the work branch, using your combined content for every file changed on both branches and the other side\'s version for everything else. Creates a real merge commit on the work branch. Give every file changed on both sides; to delete one, give delete: true.',
+        input_schema: { type: 'object', properties: {
+          from: str('The branch being merged in. Omit for the default branch.'),
+          files: { type: 'array', description: 'The resolved files.', items: { type: 'object', properties: {
+            path: str('File path from the repo root.'),
+            content: str('The complete combined file contents.'),
+            delete: { type: 'boolean', description: 'True to delete the file instead.' },
+          }, required: ['path'] } },
+          message: str('Merge commit message.'),
+        }, required: ['message'] },
       },
       {
         name: 'open_pull_request',
@@ -2062,13 +2119,14 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         ghFetch(repo, '/compare/' + encodePath(head) + '...' + encodePath(base), null, signal),
       ]);
       const ours = new Set((a.files || []).map((f) => f.filename));
-      return (b.files || []).map((f) => f.filename).filter((f) => ours.has(f));
+      const files = (b.files || []).map((f) => f.filename).filter((f) => ours.has(f));
+      return { files, mergeBase: a.merge_base_commit && a.merge_base_commit.sha };
     }
 
     const TOOL_RUNNERS = {
       async list_files(input, signal) {
         const repo = pickRepo(input);
-        const ref = await readRef(repo, signal);
+        const ref = input.branch || await readRef(repo, signal);
         const tree = await ghFetch(repo, '/git/trees/' + encodeURIComponent(ref) + '?recursive=1', null, signal);
         let paths = tree.tree.filter((t) => t.type === 'blob').map((t) => t.path);
         const dir = (input.path || '').replace(/^\/+|\/+$/g, '');
@@ -2083,11 +2141,11 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
 
       async read_file(input, signal) {
         const repo = pickRepo(input);
-        const ref = await readRef(repo, signal);
+        const ref = input.branch || await readRef(repo, signal);
         const f = await getFile(repo, input.path, ref, signal);
         if (f.tooBig) throw new Error(input.path + ' is over 1 MB, too large to open here.');
         if (f.binary) throw new Error(input.path + ' is a binary file.');
-        addLine('tool', '📄 ' + tag(repo) + 'Read ' + input.path);
+        addLine('tool', '📄 ' + tag(repo) + 'Read ' + input.path + (input.branch ? ' (' + (input.branch.length === 40 ? input.branch.slice(0, 7) : input.branch) + ')' : ''));
         let text = f.text;
         if (text.length > MAX_FILE_CHARS) {
           text = text.slice(0, MAX_FILE_CHARS) + '\n…[file cut off after ' + MAX_FILE_CHARS + ' characters]';
@@ -2248,11 +2306,16 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
             body: { base, head, ...(input.message ? { commit_message: input.message } : {}) } }, signal);
         } catch (e) {
           if (e.status === 409) {
-            const files = await bothChanged(repo, base, head, signal).catch(() => []);
-            addLine('tool', '⚠️ ' + tag(repo) + 'Merge conflict: ' + head + ' into ' + base);
+            const c = await bothChanged(repo, base, head, signal).catch(() => ({ files: [] }));
+            addLine('tool', '⚠️ ' + tag(repo) + 'Merge conflict: ' + head + ' into ' + base +
+              (c.files.length ? ' (' + c.files.join(', ') + ')' : ''));
+            const onWork = base === gh.branch;
             return { text: 'Merge conflict: GitHub could not merge ' + head + ' into ' + base + ' automatically, so nothing changed.' +
-              (files.length ? ' Files changed on both branches: ' + files.join(', ') + '.' : '') +
-              ' Tell the user. They can resolve it in a pull request on GitHub or in Visual Studio.' };
+              (c.files.length ? ' Files changed on both branches: ' + c.files.join(', ') + '.' : '') +
+              (c.mergeBase ? ' Common ancestor: ' + c.mergeBase + ' (read_file with that as branch shows the original).' : '') +
+              (onWork
+                ? ' To resolve: read each of those files on ' + base + ', on ' + head + ' and at the common ancestor, write the combined version, and call resolve_conflicts with from "' + head + '".'
+                : ' Conflicts are resolved on the work branch: pull ' + base + ' into ' + gh.branch + ' (merge_branch base "' + gh.branch + '", head "' + base + '"), resolve there, build, then merge again.') };
           }
           if (e.status === 404) throw new Error('Branch ' + base + ' or ' + head + ' was not found in ' + repo + '.');
           throw e;
@@ -2264,6 +2327,79 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         const short = data.sha.slice(0, 7);
         addLine('tool', '🔀 ' + tag(repo) + 'Merged ' + head + ' into ' + base + ' (' + short + ')');
         return { text: 'Merged ' + head + ' into ' + base + ' in ' + repo + '. Merge commit ' + short + '.', wrote: base === gh.branch ? repo : '' };
+      },
+
+      async resolve_conflicts(input, signal) {
+        const repo = pickRepo(input);
+        const b = await getBranchState(repo, signal);
+        const into = gh.branch, from = input.from || b.base;
+        if (into === b.base) throw new Error('Conflicts are resolved on a work branch, and the work branch is the default branch here.');
+        if (!b.exists) throw new Error('The work branch ' + into + ' does not exist in ' + repo + ' yet.');
+        if (from === into) throw new Error('"from" must be a different branch from ' + into + '.');
+        const given = Array.isArray(input.files) ? input.files : [];
+        const resolved = new Map();
+        for (const f of given) {
+          if (!f || typeof f.path !== 'string' || !f.path.trim()) throw new Error('Every file needs a path.');
+          if (!f.delete && typeof f.content !== 'string') throw new Error(f.path + ' needs content (or delete: true).');
+          resolved.set(f.path.replace(/^\/+/, ''), f);
+        }
+        const [intoSha, fromSha] = await Promise.all([headSha(repo, into, signal), headSha(repo, from, signal)]);
+        const [theirs, ours] = await Promise.all([
+          ghFetch(repo, '/compare/' + encodePath(into) + '...' + encodePath(from), null, signal),   // changes on "from"
+          ghFetch(repo, '/compare/' + encodePath(from) + '...' + encodePath(into), null, signal),   // changes on the work branch
+        ]);
+        if (!theirs.ahead_by) return { text: into + ' already has everything in ' + from + '; nothing to merge.' };
+        const theirFiles = theirs.files || [];
+        if (theirFiles.length >= 300) throw new Error(from + ' changed too many files (300+) to merge here. Resolve it in a pull request on GitHub or in Visual Studio.');
+        const ourSet = new Set();
+        (ours.files || []).forEach((f) => { ourSet.add(f.filename); if (f.previous_filename) ourSet.add(f.previous_filename); });
+        const conflicted = theirFiles.filter((f) => ourSet.has(f.filename) || (f.previous_filename && ourSet.has(f.previous_filename)));
+        const missing = conflicted.map((f) => f.filename).filter((p) => !resolved.has(p));
+        if (missing.length) throw new Error('Changed on both branches but not given: ' + missing.join(', ') + '. Give the combined content of each.');
+
+        // Modes (executable bits) from the incoming side; plain files otherwise.
+        const modes = new Map();
+        try {
+          const t = await ghFetch(repo, '/git/trees/' + fromSha + '?recursive=1', null, signal);
+          (t.tree || []).forEach((x) => modes.set(x.path, x.mode));
+        } catch (e) { if (signal.aborted) throw e; }
+        const mode = (p) => modes.get(p) || '100644';
+
+        const tree = [];
+        for (const f of theirFiles) {
+          if (resolved.has(f.filename)) continue;
+          if (f.status === 'renamed' && f.previous_filename && !resolved.has(f.previous_filename)) {
+            tree.push({ path: f.previous_filename, mode: '100644', type: 'blob', sha: null });
+          }
+          tree.push(f.status === 'removed'
+            ? { path: f.filename, mode: '100644', type: 'blob', sha: null }
+            : { path: f.filename, mode: mode(f.filename), type: 'blob', sha: f.sha });
+        }
+        for (const [path, f] of resolved) {
+          if (f.delete) { tree.push({ path, mode: '100644', type: 'blob', sha: null }); continue; }
+          let content = f.content;
+          // Keep Windows line endings if the work branch's copy had them.
+          if (!content.includes('\r')) {
+            const cur = await getFile(repo, path, intoSha, signal, true).catch(() => null);
+            if (cur && cur.text && cur.text.includes('\r\n')) content = content.replace(/\n/g, '\r\n');
+          }
+          tree.push({ path, mode: mode(path), type: 'blob', content });
+        }
+        const baseTree = (await ghFetch(repo, '/git/commits/' + intoSha, null, signal)).tree.sha;
+        const t = await ghFetch(repo, '/git/trees', { method: 'POST', body: { base_tree: baseTree, tree } }, signal);
+        const c = await ghFetch(repo, '/git/commits', { method: 'POST',
+          body: { message: input.message, tree: t.sha, parents: [intoSha, fromSha] } }, signal);
+        try {
+          // Not forced: if the branch moved meanwhile, GitHub refuses and nothing is lost.
+          await ghFetch(repo, '/git/refs/heads/' + encodePath(into), { method: 'PATCH', body: { sha: c.sha } }, signal);
+        } catch (e) {
+          if (e.status === 422) throw new Error(into + ' changed while merging. Read the files again and retry.');
+          throw e;
+        }
+        const short = c.sha.slice(0, 7);
+        addLine('tool', '🧩 ' + tag(repo) + 'Merged ' + from + ' into ' + into + ', ' + resolved.size + ' file' +
+          (resolved.size === 1 ? '' : 's') + ' resolved (' + short + ')');
+        return { text: 'Merged ' + from + ' into ' + into + ' in ' + repo + ' with ' + resolved.size + ' resolved file(s). Merge commit ' + short + '. Build it before merging into ' + b.base + '.', wrote: repo };
       },
 
       async open_pull_request(input, signal) {
@@ -2790,6 +2926,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       saveOrDelete('pace-lifeline-url', lifeline.url);
       store.set('pace-lifeline-writes', lifeline.writes ? '1' : '0');
       store.set('pace-lang', codeLang);
+      store.set('pace-write-mode', writeMode);
       if (conventions === null) store.del('pace-conventions'); else store.set('pace-conventions', conventions);
     }
 
@@ -2809,6 +2946,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       ghTokenInput.placeholder = savedHint(gh.token, 'github_pat_…');
       $('allowDefaultInput').checked = gh.allowDefault;
       $('langInput').value = codeLang;
+      $('writeModeInput').value = writeMode;
       $('llUrlInput').value = lifeline.url;
       $('llTokenInput').value = '';
       $('llTokenInput').placeholder = savedHint(lifeline.token, 'Bearer token');
@@ -2862,9 +3000,10 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       apiKey = keyInput.value.trim() || apiKey;
       effort = effortInput.value;
       // Anything that changes Claude's tools starts a fresh conversation.
-      const toolsKey = () => [gh.repo, gh.extra.join(','), gh.branch, codingOn(), lifeline.url, lifeline.writes].join('|');
+      const toolsKey = () => [gh.repo, gh.extra.join(','), gh.branch, codingOn(), lifeline.url, lifeline.writes, writeMode].join('|');
       const before = toolsKey();
       codeLang = $('langInput').value;
+      writeMode = $('writeModeInput').value === 'write' ? 'write' : 'dictate';
       lifeline.url = llUrl;
       lifeline.token = $('llTokenInput').value.trim() || (llUrl ? lifeline.token : '');
       lifeline.writes = $('llWritesInput').checked;
@@ -3258,7 +3397,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     async function makeSetupLink(code) {
       const setup = {
         v: 1, t: Date.now(), apiKey, ghToken: gh.token, repo: gh.repo, extra: gh.extra, branch: gh.branch,
-        allowDefault: gh.allowDefault, effort, recent: recentRepos(), lang: codeLang,
+        allowDefault: gh.allowDefault, effort, recent: recentRepos(), lang: codeLang, writeMode,
         lifelineUrl: lifeline.url, lifelineToken: lifeline.token, lifelineWrites: lifeline.writes,
       };
       let skippedConventions = false;
@@ -3298,6 +3437,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       gh.allowDefault = !!setup.allowDefault;
       effort = setup.effort || effort;
       codeLang = setup.lang || codeLang;
+      if (setup.writeMode) writeMode = setup.writeMode === 'write' ? 'write' : 'dictate';
       lifeline.url = setup.lifelineUrl || '';
       lifeline.token = setup.lifelineToken || '';
       lifeline.writes = setup.lifelineWrites !== false;

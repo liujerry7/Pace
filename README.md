@@ -29,6 +29,10 @@ These work with or without a repo:
 - **Web search**: Claude can look up docs or current facts. Searches cost $10 per 1,000, with at most 5 per step. To turn web search off, set `ENABLE_WEB_SEARCH = false` near the top of the script in `index.html`.
 
 ## Dictating code (C++ and others)
+**Who writes the code** (⚙️ Settings) is **Me** by default: Pace is your hands, not your author. Claude types only the code you dictate, turning spoken symbols into code and fixing misheard words, plus what the dictation plainly implies (semicolons, closing braces, an `#include` for a type you named). It won't add logic, finish functions, refactor or fix bugs on its own. Ask for a feature without dictating it and Claude asks whether you'll dictate it or want it written.
+
+To hand Claude the pen for one request, say so plainly: **"write it"**, **"you write it"**, **"write this for me"** or **"go ahead and implement it"**. It writes that request in full, then goes back to dictation. Reading and explaining code, building, git and Lifeline work without asking. When a build fails, Claude tells you what's wrong and where, and fixes it only when you say so. Switch to **Claude may write code** to turn this off.
+
 Say code the way you'd read it out: "for int i equals zero, i less than count, i plus plus", "vector of unique pointer to Enemy", "member camel case max speed". Claude turns spoken symbols into code ("colon colon" is `::`, "arrow" is `->`, "ampersand" is `&`) and fixes common mishearings ("in" for `int`, "see out" for `cout`, "otto" for `auto`). It writes the code into the file you're working on, not just into the chat.
 
 **Language for new code** (⚙️ Settings) picks the default: Auto (the repo's language, else JavaScript), C++, JavaScript or Python. With C++:
@@ -89,7 +93,12 @@ Then just ask: "add a dark mode toggle to the settings page." Claude lists and r
 
 **Building with an engine in another repo:** the game's build checks out Jumble from its `pace` branch when that exists (Claude's engine changes), else from Jumble's default branch, and records which Jumble commit it used. If only Jumble changed since the game last built, `check_build` pushes an empty commit to the game's `pace` branch to build again with the new engine. This needs the `JUMBLE_DEPLOY_KEY` secret on the game repo (a read-only deploy key on Jumble).
 
-**Git:** Claude can list branches, show history, compare the work branch with `main` (commits and diffs), merge branches and open pull requests. Merging into the default branch always shows a **Merge / Cancel** confirmation on screen, and nothing merges until you tap **Merge**; Claude can't answer it for you. Merging `main` into the work branch (to bring it up to date) needs no tap. If a merge conflicts, nothing changes and Claude names the files; resolve it in a pull request on GitHub or in Visual Studio. Opening pull requests needs the token to also have **Pull requests: Read and write**; merging works with Contents access alone.
+**Git:** Claude can list branches, show history, compare the work branch with `main` (commits and diffs), pull, merge, resolve conflicts and open pull requests.
+- **Push:** there's no separate step. Every change Claude makes is committed straight to the work branch on GitHub. To get it on your computer, pull the `pace` branch there (Git → Pull in Visual Studio).
+- **Pull:** "pull main into pace" merges `main` into the work branch to bring it up to date.
+- **Merge:** merging into the default branch always shows a **Merge / Cancel** confirmation on screen, and nothing merges until you tap **Merge**. Claude can't answer it for you.
+- **Conflicts:** if a merge conflicts, Claude names the files. It reads each one on both branches and at their common ancestor, writes the combined version, and makes a real merge commit on the work branch (`resolve_conflicts`). Every file changed on both sides must be resolved, or nothing is committed. In dictation mode (below) it explains how it would combine them and waits for your go-ahead. Conflicts are always resolved on the work branch: pull `main` into `pace`, resolve, build, then merge `pace` into `main`.
+- **Pull requests** need the token to also have **Pull requests: Read and write**. Everything else works with Contents access alone.
 
 **Coding conventions:** Settings → *Coding conventions* holds your naming, class-design and clang-format rules (copied from your Lifeline docs). Claude follows them in code it writes and, when you ask for something that breaks them, writes the conforming version and says so in a sentence. A repo's own `CLAUDE.md`, `CONVENTIONS.md` or `.clang-format` wins. Edit the text freely; *Reset to the Lifeline version* brings back the original.
 
