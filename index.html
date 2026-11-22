@@ -825,12 +825,16 @@
   <script>
     // Show startup errors on screen: phones have no console to look at.
     (() => {
-      const BUILD = '2026-11-22b';
-      const say = (msg) => {
+      const BUILD = '2026-11-22c';
+      const seen = [];
+      const say = (msg) => {          // keeps every message, so a later one can't hide the first
+        seen.push(msg);
         const s = document.getElementById('status');
-        if (s) { s.textContent = msg + ' [build ' + BUILD + ']'; s.classList.add('error'); }
+        if (s) { s.textContent = seen.join(' · ') + ' [build ' + BUILD + ']'; s.classList.add('error'); }
       };
-      window.addEventListener('error', (e) => say('Pace hit an error: ' + e.message + ' (line ' + e.lineno + ')'));
+      window.addEventListener('error', (e) => say('Pace hit an error: ' + e.message + ' (line ' + e.lineno + ':' + e.colno + ')'));
+      // Startup work that waits on something (storage, voices) fails as a rejected promise, not an error.
+      window.addEventListener('unhandledrejection', (e) => say('Pace hit an error: ' + ((e.reason && e.reason.message) || e.reason)));
       window.addEventListener('load', () => setTimeout(() => {
         if ((location.hash || '').startsWith('#setup=')) say('Pace got the setup link but did not open it.');
       }, 1500));
