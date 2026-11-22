@@ -823,6 +823,20 @@
   </div>
 
   <script>
+    // Show startup errors on screen: phones have no console to look at.
+    (() => {
+      const BUILD = '2026-11-22b';
+      const say = (msg) => {
+        const s = document.getElementById('status');
+        if (s) { s.textContent = msg + ' [build ' + BUILD + ']'; s.classList.add('error'); }
+      };
+      window.addEventListener('error', (e) => say('Pace hit an error: ' + e.message + ' (line ' + e.lineno + ')'));
+      window.addEventListener('load', () => setTimeout(() => {
+        if ((location.hash || '').startsWith('#setup=')) say('Pace got the setup link but did not open it.');
+      }, 1500));
+    })();
+  </script>
+  <script>
     // Refuse to run inside someone else's page (a frame could trick your taps).
     if (window.self !== window.top && location.protocol !== 'file:') {
       document.body.textContent = 'Pace can only be opened directly, not inside another page.';
