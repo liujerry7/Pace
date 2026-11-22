@@ -825,7 +825,7 @@
   <script>
     // Show startup errors on screen: phones have no console to look at.
     (() => {
-      const BUILD = '2026-11-22d';
+      const BUILD = '2026-11-22e';
       const seen = [];
       const say = (msg) => {          // keeps every message, so a later one can't hide the first
         seen.push(msg);
@@ -838,7 +838,7 @@
       // Startup work that waits on something (storage, voices) fails as a rejected promise, not an error.
       window.addEventListener('unhandledrejection', (e) => say('Pace hit an error: ' + ((e.reason && e.reason.message) || e.reason)));
       window.addEventListener('load', () => setTimeout(() => {
-        if ((location.hash || '').startsWith('#setup=')) say('Pace got the setup link but did not open it.');
+        if ((location.hash || '').startsWith('#setup=')) say('Pace got the setup link but did not open it (reached: ' + (window.__paceAt || 'nothing') + ').');
       }, 7000));
     })();
   </script>
@@ -849,6 +849,7 @@
       throw new Error('Pace was framed');
     }
 
+    window.__paceAt = 'Settings you might want to tweak';
     // =====================================================================
     // Settings you might want to tweak
     // =====================================================================
@@ -1056,6 +1057,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     // Saying one of these (on its own) ends a hands-free conversation.
     const STOP_PHRASES = /^(stop|stop listening|end conversation|goodbye|good bye|bye)[.!]?$/i;
 
+    window.__paceAt = 'Element references';
     // =====================================================================
     // Element references
     // =====================================================================
@@ -1066,6 +1068,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     const passInput = $('passInput'), lockEl = $('lock');
     const ghRepoInput = $('ghRepoInput'), ghBranchInput = $('ghBranchInput'), ghTokenInput = $('ghTokenInput');
 
+    window.__paceAt = 'Small helpers: safe localStorage, status';
     // =====================================================================
     // Small helpers: safe localStorage, status messages
     // =====================================================================
@@ -1080,6 +1083,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       statusEl.classList.toggle('error', isError);
     }
 
+    window.__paceAt = 'App state';
     // =====================================================================
     // App state
     //
@@ -1132,6 +1136,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     let turnActive = false;   // Claude is streaming or running tools
     let turnAbort = null;     // AbortController for the current turn
 
+    window.__paceAt = 'Update the big button so its label alway';
     // =====================================================================
     // Update the big button so its label always says what a tap/hold will do.
     // =====================================================================
@@ -1175,6 +1180,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       else setPhase('idle');
     }
 
+    window.__paceAt = 'TRANSCRIPT HANDLING — the one place ever';
     // =====================================================================
     // TRANSCRIPT HANDLING — the one place every finished phrase goes.
     // Adds your line to the log, then (if a key is saved) asks Claude.
@@ -1320,6 +1326,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       scheduleSave();
     }
 
+    window.__paceAt = 'Speaking out loud (browsers built-in te';
     // =====================================================================
     // Speaking out loud (browser's built-in text-to-speech), as text streams in
     // =====================================================================
@@ -1431,6 +1438,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       stopSpeaking();
     }
 
+    window.__paceAt = 'Talking to Claude (Anthropic Messages AP';
     // =====================================================================
     // Talking to Claude (Anthropic Messages API, streamed, straight from the browser)
     // =====================================================================
@@ -1732,6 +1740,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       return { message: msg };
     }
 
+    window.__paceAt = 'Coding tools: Claude reads and commits t';
     // =====================================================================
     // Coding tools: Claude reads and commits to a GitHub repo through the
     // GitHub REST API, using your token, straight from this page.
@@ -2500,6 +2509,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       },
     };
 
+    window.__paceAt = 'Local workspace: Claudes files when no ';
     // =====================================================================
     // Local workspace: Claude's files when no repo is connected, saved in this
     // browser as { path: text } and shown in the Files panel.
@@ -2577,6 +2587,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       },
     };
 
+    window.__paceAt = 'run_javascript: Claudes code runs in a ';
     // =====================================================================
     // run_javascript: Claude's code runs in a Web Worker built from a blob.
     // It has its own thread (so an endless loop can be killed), no access to
@@ -2646,6 +2657,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       return { text: output.length > 30000 ? output.slice(0, 30000) + '\n…(output cut off)' : output };
     }
 
+    window.__paceAt = 'Files panel (folder icon): view, preview';
     // =====================================================================
     // Files panel (folder icon): view, preview and download workspace files
     // =====================================================================
@@ -2708,6 +2720,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       saveWorkspace();
     });
 
+    window.__paceAt = 'Speech recognition';
     // =====================================================================
     // Speech recognition
     // =====================================================================
@@ -2882,6 +2895,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       addTranscriptLine(text);
     }
 
+    window.__paceAt = 'Button wiring';
     // =====================================================================
     // Button wiring. Pointer Events cover mouse, touch and pen in one go.
     // =====================================================================
@@ -2924,6 +2938,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       setPhase('idle');
     });
 
+    window.__paceAt = 'Passcode vault: with a passcode set, the';
     // =====================================================================
     // Passcode vault: with a passcode set, the API key and GitHub token are
     // stored encrypted (AES-GCM, key derived from the passcode with PBKDF2)
@@ -3178,6 +3193,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       showStatus('API key, GitHub and Lifeline tokens and passcode removed from this browser.');
     });
 
+    window.__paceAt = 'QR code encoder: self-contained, no depe';
     // =====================================================================
     // QR code encoder: self-contained, no dependencies, safe to copy into
     // another project. Byte mode, error correction L or M, versions 1-40.
@@ -3441,6 +3457,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       return { make, svg };
     })();
 
+    window.__paceAt = 'Move your setup to another device with a';
     // =====================================================================
     // Move your setup to another device with a QR code. The QR holds a link
     // whose #fragment carries your settings, encrypted with a one-time code
@@ -3595,6 +3612,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         (pass ? ' Passcode lock is on.' : ''));
     });
 
+    window.__paceAt = 'Chat history: each conversation is saved';
     // =====================================================================
     // Chat history: each conversation is saved in this browser (IndexedDB),
     // encrypted with a random data key. With a passcode, that data key lives
@@ -3806,6 +3824,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       showStatus('Copied ' + lines.length + ' line(s) to the clipboard.');
     });
 
+    window.__paceAt = 'Start up: ask for the passcode first if ';
     // =====================================================================
     // Start up: ask for the passcode first if the keys are locked.
     // =====================================================================
@@ -3869,6 +3888,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     }
     for (const ev of ['hashchange', 'popstate', 'pageshow', 'load', 'focus']) window.addEventListener(ev, checkSetupHash);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checkSetupHash(); });
+    window.__paceAt = 'end';
     let setupPolls = 0;
     const setupPoll = setInterval(() => { checkSetupHash(); if (++setupPolls >= 20) clearInterval(setupPoll); }, 250);
   </script>
