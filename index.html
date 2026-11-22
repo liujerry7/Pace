@@ -3428,6 +3428,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     // and the other device strips it from its history as soon as it opens.
     // =====================================================================
     const SETUP_PREFIX = '#setup=';
+    const PUBLIC_URL = 'https://liujerry7.github.io/Pace/';
     const SETUP_TTL_MS = 30 * 60 * 1000;
     const SETUP_MAX_JSON = 900;   // keeps the QR small enough to scan off a screen
     const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no 0/O, 1/I/L
@@ -3470,7 +3471,10 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       blob.set(salt, 1);
       blob.set(iv, 17);
       blob.set(sealed, 29);
-      return { url: location.origin + location.pathname + SETUP_PREFIX + encodeBase64Url(blob), skippedConventions };
+      // A phone can't open a file:// or localhost page, so point it at the published copy instead.
+      const local = location.protocol === 'file:' || /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+      const base = local ? PUBLIC_URL : location.origin + location.pathname;
+      return { url: base + SETUP_PREFIX + encodeBase64Url(blob), skippedConventions };
     }
 
     // Throws if the code is wrong or the link is damaged.
@@ -3832,6 +3836,16 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       ready();
     }
     if (pendingSetup) openImport(pendingSetup);
+    // Pace already open in this tab? Opening the setup link then only changes the #fragment and the page
+    // doesn't reload, so catch it here too.
+    window.addEventListener('hashchange', () => {
+      if (!(location.hash || '').startsWith(SETUP_PREFIX)) return;
+      const link = location.href;
+      window.history.replaceState(null, '', location.pathname + location.search);
+      if (settingsEl.open) settingsEl.close();
+      if (importEl.open) importEl.close();
+      openImport(link);
+    });
   </script>
 </body>
 </html>
