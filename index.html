@@ -825,19 +825,21 @@
   <script>
     // Show startup errors on screen: phones have no console to look at.
     (() => {
-      const BUILD = '2026-11-22c';
+      const BUILD = '2026-11-22d';
       const seen = [];
       const say = (msg) => {          // keeps every message, so a later one can't hide the first
         seen.push(msg);
         const s = document.getElementById('status');
         if (s) { s.textContent = seen.join(' · ') + ' [build ' + BUILD + ']'; s.classList.add('error'); }
       };
-      window.addEventListener('error', (e) => say('Pace hit an error: ' + e.message + ' (line ' + e.lineno + ':' + e.colno + ')'));
+      // "Script error." at line 0 comes from code the browser itself adds to the page (Chrome on iPhone
+      // does), not from Pace, so it's left out.
+      window.addEventListener('error', (e) => e.lineno && say('Pace hit an error: ' + e.message + ' (line ' + e.lineno + ':' + e.colno + ')'));
       // Startup work that waits on something (storage, voices) fails as a rejected promise, not an error.
       window.addEventListener('unhandledrejection', (e) => say('Pace hit an error: ' + ((e.reason && e.reason.message) || e.reason)));
       window.addEventListener('load', () => setTimeout(() => {
         if ((location.hash || '').startsWith('#setup=')) say('Pace got the setup link but did not open it.');
-      }, 1500));
+      }, 7000));
     })();
   </script>
   <script>
@@ -3854,16 +3856,21 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       ready();
     }
     if (pendingSetup) openImport(pendingSetup);
-    // Pace already open in this tab? Opening the setup link then only changes the #fragment and the page
-    // doesn't reload, so catch it here too.
-    window.addEventListener('hashchange', () => {
+    // The link can also arrive after startup: Pace already open in this tab (only the #fragment changes, no
+    // reload), or Chrome on iPhone filling in the fragment a moment after the page starts, without firing
+    // hashchange. So also look on those events, and keep looking for the first few seconds.
+    function checkSetupHash() {
       if (!(location.hash || '').startsWith(SETUP_PREFIX)) return;
       const link = location.href;
       window.history.replaceState(null, '', location.pathname + location.search);
       if (settingsEl.open) settingsEl.close();
       if (importEl.open) importEl.close();
       openImport(link);
-    });
+    }
+    for (const ev of ['hashchange', 'popstate', 'pageshow', 'load', 'focus']) window.addEventListener(ev, checkSetupHash);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkSetupHash(); });
+    let setupPolls = 0;
+    const setupPoll = setInterval(() => { checkSetupHash(); if (++setupPolls >= 20) clearInterval(setupPoll); }, 250);
   </script>
 </body>
 </html>
