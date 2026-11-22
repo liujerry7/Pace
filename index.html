@@ -1368,7 +1368,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       // sentence, but short enough that Chrome doesn't cut them off. Split only
       // where punctuation is followed by a space, so "a.js" stays whole.
       const chunks = [];
-      clean.split(/(?<=[.!?])\s+/).forEach((piece) => {
+      clean.replace(/([.!?])\s+/g, '$1\u0000').split('\u0000').forEach((piece) => {   // no lookbehind: iOS < 16.4 can't parse it
         piece = piece.trim();
         if (!piece) return;
         const last = chunks.length - 1;
