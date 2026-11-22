@@ -825,7 +825,7 @@
   <script>
     // Show startup errors on screen: phones have no console to look at.
     (() => {
-      const BUILD = '2026-11-22e';
+      const BUILD = '2026-11-22f';
       const seen = [];
       const say = (msg) => {          // keeps every message, so a later one can't hide the first
         seen.push(msg);
@@ -3836,10 +3836,16 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     }
 
     // Opened from a setup QR code? Take the link out of the address bar and history first.
-    let pendingSetup = '';
+    // Chrome on iPhone wraps replaceState with its own code, which can throw (it trips over Pace's global
+    // `history`, the chat). So never let that stop startup; clearing the fragment is the fallback.
+    function stripSetupHash() {
+      try { window.history.replaceState(null, '', location.pathname + location.search); }   // `history` is the chat
+      catch { try { location.hash = ''; } catch { /* the link stays in the address; it expires anyway */ } }
+    }
+    let pendingSetup = '', handledSetup = '';
     if ((location.hash || '').startsWith(SETUP_PREFIX)) {
-      pendingSetup = location.href;
-      window.history.replaceState(null, '', location.pathname + location.search);   // `history` is the chat
+      pendingSetup = handledSetup = location.href;
+      stripSetupHash();
     }
 
     setPhase('idle');
@@ -3879,9 +3885,9 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     // reload), or Chrome on iPhone filling in the fragment a moment after the page starts, without firing
     // hashchange. So also look on those events, and keep looking for the first few seconds.
     function checkSetupHash() {
-      if (!(location.hash || '').startsWith(SETUP_PREFIX)) return;
-      const link = location.href;
-      window.history.replaceState(null, '', location.pathname + location.search);
+      if (!(location.hash || '').startsWith(SETUP_PREFIX) || location.href === handledSetup) return;
+      const link = handledSetup = location.href;
+      stripSetupHash();
       if (settingsEl.open) settingsEl.close();
       if (importEl.open) importEl.close();
       openImport(link);
