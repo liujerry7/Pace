@@ -20,6 +20,30 @@ Code in replies is shown on screen but not read aloud. **Clear** also starts a f
 
 **Typing, and Chrome on iPhone:** the box above the mic button takes typed messages (Enter sends, Shift+Enter adds a line), handled just like spoken ones. In browsers that can't give web pages the mic, such as Chrome on iPhone, use it with your keyboard's own mic key: tap the box, tap the keyboard's 🎤, talk, then send. Claude still answers out loud. Hands-free mode needs Safari on iPhone, or Chrome on a computer or Android. Typing during a hands-free conversation ends it.
 
+## Pace on your Mac (Claude Code's engine)
+The `server` folder runs Pace on your Mac with the Claude Agent SDK, the engine inside Claude Code. Pace can then do what Claude Code does, in a real folder on your disk: read, search and edit files, run commands, use subagents. Chats can be resumed, and Pace remembers things between chats.
+
+```bash
+cd server && npm install && npm start
+```
+
+It prints a link like `http://localhost:8787/#mac=…`. Open it once and the page connects itself: the token is saved like your other keys, then removed from the address bar. On another browser, fill in ⚙️ Settings → **Run on your Mac** by hand (server URL and the token in `~/.pace/token`). While this is on, Pace uses the Mac instead of the GitHub repo and Lifeline settings.
+
+- **Anthropic key:** start the server with `ANTHROPIC_API_KEY` set, or just keep your key in Pace's Settings and the page sends it along with each message.
+- **Which folder:** Settings → **Folder** (for example `~/Developer/Projects/Pace`), or blank for `workspace` in `agent/config.yaml`. Pace only works inside `allowed_roots`. The folder's own `CLAUDE.md` and `.claude/` settings are loaded, like in Claude Code.
+- **Asking first:** reading, searching, editing files and web search run on their own. Anything else, such as a shell command, pops up **Allow / Cancel** on screen first, and Claude says "tap Allow". An unanswered prompt counts as no after 5 minutes. Edit the list in `tools.auto_allow` in the version file.
+- **From your phone:** the server listens only on this Mac (127.0.0.1). With [Tailscale](https://tailscale.com) on both, run `tailscale serve --bg 8787` and open `https://<your-mac>.<tailnet>.ts.net/#mac=<token>` on the phone. HTTPS keeps the mic working.
+- **Off:** tapping the button or saying "stop" stops the current reply. Ctrl+C in the terminal turns Pace off completely.
+
+**Who Pace is (per Pace):** set up like Lyle's version files. `agent/config.yaml` picks a version, and `agent/versions/v1.yaml` sets the model, effort, humor level (0–5) and how Pace talks when you speak versus type. It also lists the tools that run without asking. `agent/prompts/v1.md` is the persona. Change one knob at a time, save it as `v2.yaml`, point `config.yaml` at it and rate it after a few chats. New chats pick up changes without a restart. Per-machine overrides, such as the folder or a Lifeline URL and token, go in `~/.pace/config.yaml`.
+
+**Memory:**
+- *Per Pace:* `~/.pace/MEMORY.md`. Every chat starts with it. Pace adds to it with its `remember` tool when something durable comes up ("remember I use tabs") and removes notes fully with `forget`. You can edit the file yourself.
+- *Per chat:* the whole conversation is kept on the Mac. Reopen a chat from the clock icon (it says "Mac" there) and Pace resumes it with everything it had. When you start a new chat (✎), the Mac writes a short handoff note about the old one, and the next new chat starts with that note under "Last time".
+- *Per folder:* the folder's `CLAUDE.md`, as in Claude Code.
+
+Chats live in `~/.pace/chats/`. The Settings for dictation, language and coding conventions are sent when a chat starts.
+
 ## Building without a repo
 With no repo connected, Claude works on a small set of files kept in this browser. Ask for something like "make a snake game" or "write a palindrome checker and test it". The transcript shows each step, and the **folder icon** at the top opens the files. HTML files have **Preview**, which runs the page inside Pace in a sandbox with no network access. Every file has **Download**.
 
