@@ -5,18 +5,20 @@ Talk to Claude out loud and have it build things: in files kept in your browser,
 ## Use it
 1. Open the page (GitHub Pages URL on a phone; HTTPS is required for the microphone).
 2. Tap **⚙️ Settings**, paste your Anthropic API key, and tap **Save**. The key stays in that browser only and is sent only to `api.anthropic.com`. Without a key, Pace just transcribes.
-3. **Hands-free** (default): tap **Start conversation**. Speak, pause, and Claude answers out loud as its reply streams in, then Pace listens again. Tap while Claude is talking or working to interrupt; say "stop" (or tap) to end.
-4. **Hold to talk**: switch modes with the button at the top, then hold the big button (or the spacebar) while you speak.
+3. **Hands-free** (default): tap the mic at the right of the message box. Speak, pause, and Claude answers out loud as its reply streams in, then Pace listens again. Tap while Claude is talking or working to interrupt; say "stop" (or tap) to end.
+4. **Hold to talk**: switch modes with the button at the bottom of the sidebar, then hold the mic (or the spacebar) while you speak.
 
-Code in replies is shown on screen but not read aloud. **Clear** also starts a fresh conversation.
+The screen is just the chat, the message box and the mic. Everything else is in the sidebar (☰ on a phone): your Lifeline projects and their chats, **New chat** (✎), and at the bottom the mode switch, all chats, copy, files and ⚙️ Settings.
+
+Code in replies is shown on screen but not read aloud.
 
 **Effort** (in Settings) trades speed for depth. **Auto** (the default) uses Low for plain chat, so replies come quickly, and Medium when a repo is connected. Use High or Extra high for heavier coding. Effort stays the same for a whole conversation, because changing it mid-conversation would throw away the prompt cache.
 
 **Voice** (in Settings): Pace picks the most natural voice your device has. Pick another, change the speed, and tap **Test voice** to hear it. In Chrome the "Google" voices sound best, and in Edge the "Natural" ones. On iPhone, download an Enhanced or Premium voice in Settings → Accessibility → Spoken Content → Voices → English.
 
-**Chats:** every conversation is saved in this browser (up to 50), encrypted. With a passcode set, chats lock along with your keys. Tap the clock icon to reopen one and carry on where you left off. **Clear** (✎) starts a new chat and keeps the old one. Forgetting your passcode erases the chats, because they can't be decrypted without it.
+**Chats:** every conversation is saved in this browser (up to 50), encrypted. With a passcode set, chats lock along with your keys. Each chat is filed under the Lifeline project that was open when it started; open a project in the sidebar to see its chats, or tap the clock icon for all of them. **New chat** (✎) starts a new chat and keeps the old one. Forgetting your passcode erases the chats, because they can't be decrypted without it.
 
-**Mic trouble:** under the mic button, Pace shows "Starting the mic…", then "Go ahead, I'm listening…" once it actually hears audio, and "Hearing you…" when you speak. If the mic never starts, or hears nothing twice in a row, it says so. On iPhone, use Safari.
+**Mic trouble:** above the message box, Pace shows "Starting the mic…", then "Go ahead, I'm listening…" once it actually hears audio, and "Hearing you…" when you speak. If the mic never starts, or hears nothing twice in a row, it says so. On iPhone, use Safari.
 
 **Typing, and Chrome on iPhone:** the box above the mic button takes typed messages (Enter sends, Shift+Enter adds a line), handled just like spoken ones. In browsers that can't give web pages the mic, such as Chrome on iPhone, use it with your keyboard's own mic key: tap the box, tap the keyboard's 🎤, talk, then send. Claude still answers out loud. Hands-free mode needs Safari on iPhone, or Chrome on a computer or Android. Typing during a hands-free conversation ends it.
 
@@ -71,6 +73,9 @@ In ⚙️ Settings → **Lifeline**, paste the URL of Lifeline's MCP server and,
 - **The server must be reachable over the internet** (HTTPS, Streamable HTTP or SSE). Anthropic's servers make the calls through the MCP connector, so a server that only runs on your computer won't work. Servers that sign in with OAuth need you to get an access token first and paste it here. Pace doesn't refresh it, so paste a new one when it expires.
 - **What Claude may do:** read tools (overview, what now, events, projects, goals, time tracked, docs) are always on. **Let Claude add and update things** turns on logging time, clocks, ticking to-dos, creating and updating events, projects and docs. Claude says what it will change and waits for your "yes". Deleting, archiving and rule changes are never enabled.
 - **Privacy:** the token is stored like your other keys (encrypted with the passcode, if you set one) and included in the setup link for another device. It's sent only to api.anthropic.com, which passes it to the Lifeline server.
+
+- **Projects in the sidebar:** Pace lists your in-progress Lifeline projects as a tree (projects you've chatted in come first). Tap one to start a chat in it; Claude then knows which project you mean. The list is fetched through Anthropic's MCP connector by a small model (Claude Haiku), costs about a cent, is kept encrypted in the browser and refreshes every 6 hours or when you tap ↻.
+- **Takeaways:** when you leave a chat (new chat, another project, or an older chat), Claude Haiku reads what's new in it and, if there's anything worth keeping (decisions, conclusions, to-dos, ideas), appends a dated entry to the project's **Pace notes** doc, creating it the first time. Short or routine chats are skipped. This needs **Let Claude add and update things** on. Closing the app doesn't trigger it, so tap ✎ when you're done.
 
 Changing the repo, Lifeline URL or the write switch starts a new conversation, because Claude's tools change.
 

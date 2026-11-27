@@ -8,8 +8,8 @@
        Anthropic and GitHub, so nothing can ship your keys anywhere else. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src 'self' https://api.anthropic.com https://api.github.com http://localhost:* http://127.0.0.1:* https://*.ts.net; worker-src blob: 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
-  <meta name="theme-color" content="#14130e" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f6f1de" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16181d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
   <!-- Installable app: "Add to Home Screen" on iPhone, "Install app" in Chrome -->
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
@@ -20,53 +20,57 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Pace</title>
   <style>
-    /* ---------- Design tokens: flat colours, shades of yellow and grey-yellow.
-                  Dark by default; light follows the system. ---------- */
+    /* ---------- Design tokens: cool blue-greys in several steps, with one warm
+                  amber-yellow accent (its complement). Dark by default; light follows the system. ---------- */
     :root {
       color-scheme: dark;
-      --bg: #14130e;          /* near-black olive */
-      --surface: #1d1b14;
-      --surface-2: #27241a;
-      --border: #36321f;
-      --text: #f3efdf;        /* cream */
-      --muted: #aaa38a;       /* grey-yellow */
-      --faint: #6f6a55;
-      --accent: #f0c43c;      /* Pace yellow: idle orb, buttons */
-      --accent-ink: #1d1806;
-      --link: #f0c43c;
-      --st-listen: #ffdd33;   /* bright lemon while listening */
-      --st-think: #9b9268;    /* khaki while working */
-      --st-think-ink: #14130e;
-      --st-speak: #efe2b0;    /* pale butter while speaking */
-      --user-bubble: #3b3319; /* mustard */
-      --code-bg: #0d0c08;
-      --code-text: #ebe6d2;
-      --error-bg: #3a2614;
-      --error: #f0a060;       /* burnt ochre */
+      --bg: #16181d;          /* deep slate */
+      --side: #1b1e24;        /* sidebar, one step up */
+      --surface: #21252c;
+      --surface-2: #2a2f38;
+      --border: #343a45;
+      --text: #e4e7ec;        /* soft white, not pure */
+      --muted: #9aa2af;
+      --faint: #656d7a;
+      --accent: #e3b25a;      /* warm amber: the mic, primary buttons */
+      --accent-ink: #231a08;
+      --link: #e9c27a;
+      --st-listen: #f2c467;   /* brighter amber while listening */
+      --st-think: #7d8aa1;    /* cool steel while working */
+      --st-think-ink: #12141a;
+      --st-speak: #eed7a6;    /* pale wheat while speaking */
+      --user-bubble: #2b313b; /* cool grey bubble */
+      --selected: #2a2f38;
+      --code-bg: #111318;
+      --code-text: #dfe3ea;
+      --error-bg: #3a2b26;
+      --error: #eba27a;
       --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     }
     @media (prefers-color-scheme: light) {
       :root {
         color-scheme: light;
-        --bg: #f6f1de;
-        --surface: #fffbec;
-        --surface-2: #efe7c9;
-        --border: #e2d8b2;
-        --text: #2b2713;
-        --muted: #756e52;
-        --faint: #ada584;
-        --accent: #e8b52a;
-        --accent-ink: #2b2306;
-        --link: #8a6a00;
-        --st-listen: #ffcc00;
-        --st-think: #a89b5f;
-        --st-think-ink: #fffbec;
-        --st-speak: #f3dd8a;
-        --user-bubble: #f4df97;
-        --code-bg: #2b2713;
-        --code-text: #f3efdf;
-        --error-bg: #f7dfc8;
-        --error: #9a4210;
+        --bg: #f5f6f8;
+        --side: #eceef2;
+        --surface: #ffffff;
+        --surface-2: #e7eaef;
+        --border: #d9dde4;
+        --text: #1e2229;
+        --muted: #5c6370;
+        --faint: #9aa1ac;
+        --accent: #d7a13c;
+        --accent-ink: #241906;
+        --link: #8a6212;
+        --st-listen: #e9ad37;
+        --st-think: #8a95a8;
+        --st-think-ink: #ffffff;
+        --st-speak: #f0d596;
+        --user-bubble: #e3e7ee;
+        --selected: #dde1e8;
+        --code-bg: #1e2229;
+        --code-text: #e4e7ec;
+        --error-bg: #f6e0d6;
+        --error: #9a4318;
       }
     }
 
@@ -85,31 +89,38 @@
 
     .app {
       height: 100dvh;
-      max-width: 800px;
-      margin: 0 auto;
       display: flex;
-      flex-direction: column;
       padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
     }
-
-    /* ---------- Header ---------- */
-    .top {
+    .main {
+      position: relative;
+      flex: 1;
+      min-width: 0;
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 14px 16px 10px;
+      flex-direction: column;
     }
+    .main > * { width: 100%; max-width: 780px; margin-left: auto; margin-right: auto; }
+
+    /* ---------- Sidebar: projects and their chats ---------- */
+    .sidebar {
+      width: 280px;
+      flex: none;
+      display: flex;
+      flex-direction: column;
+      background: var(--side);
+      border-right: 1px solid var(--border);
+    }
+    .side-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 12px 10px 16px; }
     .brand {
       display: flex;
       align-items: center;
       gap: 10px;
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
       letter-spacing: -.02em;
     }
     .dot {
-      width: 10px; height: 10px;
+      width: 9px; height: 9px;
       border-radius: 50%;
       background: var(--accent);
       transition: background .3s;
@@ -117,7 +128,77 @@
     [data-phase="listening"] .dot { background: var(--st-listen); }
     [data-phase="thinking"]  .dot { background: var(--st-think); }
     [data-phase="speaking"]  .dot { background: var(--st-speak); }
-    .top-actions { display: flex; align-items: center; gap: 8px; }
+    .side-body { flex: 1; overflow-y: auto; padding: 4px 8px 12px; }
+    .side-label {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 8px 6px;
+      font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint);
+    }
+    .side-hint { padding: 4px 8px 8px; font-size: 13px; }
+    .tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+    .tree ul { padding-left: 14px; }
+    .tree-row { display: flex; align-items: center; gap: 2px; border-radius: 8px; }
+    .tree-row:hover { background: var(--surface); }
+    .tree-row.current { background: var(--selected); }
+    .tree-row.current .proj-name { color: var(--text); font-weight: 600; }
+    .caret {
+      width: 22px; height: 30px; flex: none; padding: 0;
+      background: none; border: none; color: var(--faint);
+      display: grid; place-items: center;
+    }
+    .caret svg { width: 12px; height: 12px; transition: transform .15s; }
+    .caret[aria-expanded="true"] svg { transform: rotate(90deg); }
+    .caret.none { visibility: hidden; }
+    .proj-name {
+      flex: 1; min-width: 0; padding: 6px 8px 6px 2px;
+      background: none; border: none; text-align: left;
+      font-size: 14px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .proj-count { padding-right: 8px; font-size: 12px; color: var(--faint); }
+    .chat-item {
+      display: block; width: 100%; padding: 5px 8px 5px 26px;
+      background: none; border: none; border-radius: 8px; text-align: left;
+      font-size: 13.5px; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .chat-item:hover { background: var(--surface); color: var(--text); }
+    .chat-item[aria-current="true"] { color: var(--text); background: var(--surface); }
+    .chat-item .when { color: var(--faint); font-size: 12px; }
+    .side-foot {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--border);
+    }
+    .side-foot-gap { flex: 1; }
+    .side-foot .icon-btn { width: 34px; height: 34px; background: none; border-color: transparent; }
+    .side-foot .icon-btn:hover { background: var(--surface); }
+    .side-foot .icon-btn svg { width: 17px; height: 17px; }
+    .side-foot .pill { padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+    .icon-btn.small { width: 26px; height: 26px; background: none; border: none; }
+    .icon-btn.small svg { width: 14px; height: 14px; }
+    .icon-btn.small.spinning svg { animation: spin 1s linear infinite; }
+    .icon-btn.menu-btn { display: none; }
+    .scrim { display: none; }
+    /* Phones and narrow windows: the sidebar slides in over the chat. */
+    @media (max-width: 860px) {
+      .sidebar {
+        position: fixed; z-index: 40; inset: 0 auto 0 0;
+        width: min(300px, 86vw);
+        padding-top: env(safe-area-inset-top);
+        transform: translateX(-100%);
+        transition: transform .2s ease-out;
+      }
+      body.side-open .sidebar { transform: none; }
+      .scrim { display: block; position: fixed; inset: 0; z-index: 39; background: rgba(8, 10, 14, .5); opacity: 0; pointer-events: none; transition: opacity .2s; }
+      body.side-open .scrim { opacity: 1; pointer-events: auto; }
+      .icon-btn.menu-btn {
+        display: grid; position: absolute; top: 10px; left: 10px; z-index: 5;
+        width: 38px !important; max-width: 38px; height: 38px; margin: 0 !important;
+        background: none; border-color: transparent;
+      }
+      #scroller { padding-top: 54px !important; }
+    }
 
     .pill {
       display: inline-flex;
@@ -146,7 +227,8 @@
 
     /* ---------- Status line ---------- */
     #status {
-      margin: 0 16px 6px;
+      margin: 12px auto 6px;
+      padding: 0 16px;
       font-size: 14px;
       color: var(--muted);
       text-align: center;
@@ -156,6 +238,7 @@
       color: var(--error);
       background: var(--error-bg);
       border: none;
+      width: calc(100% - 32px);
       padding: 10px 14px;
       border-radius: 12px;
       text-align: left;
@@ -174,8 +257,7 @@
       text-align: center;
       color: var(--muted);
     }
-    .empty h2 { margin: 0 0 8px; font-size: 24px; letter-spacing: -.02em; color: var(--text); }
-    .empty p { margin: 0; font-size: 15px; }
+    .empty h2 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.02em; color: var(--muted); }
     #scroller:has(#transcript li) .empty { display: none; }
 
     #transcript {
@@ -237,43 +319,51 @@
 
     /* ---------- Bottom dock: live words, the orb, quick actions ---------- */
     .dock {
-      padding: 6px 16px calc(14px + env(safe-area-inset-bottom));
+      padding: 6px 16px calc(12px + env(safe-area-inset-bottom));
       background: var(--bg);
     }
     #live {
       min-height: 1.6em;
-      margin: 0 auto 12px;
-      max-width: 600px;
+      margin: 0 auto 8px;
       text-align: center;
       font-size: 18px;
       font-weight: 500;
       overflow-wrap: anywhere;
     }
+    #live:empty { min-height: 0; margin-bottom: 4px; }
     #live:empty::before { content: attr(data-placeholder); color: var(--faint); font-size: 15px; font-weight: 400; }
-    .type-bar { display: flex; align-items: flex-end; gap: 8px; max-width: 600px; margin: 0 auto 12px; }
+    .type-bar {
+      display: flex; align-items: flex-end; gap: 6px;
+      padding: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 26px;
+    }
+    .type-bar:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
     .type-bar textarea {
       flex: 1;
-      min-height: 42px;
-      max-height: 140px;
+      min-height: 40px;
+      max-height: 160px;
       resize: none;
-      padding: 10px 14px;
-      border: 1px solid var(--border);
-      border-radius: 21px;
-      background: var(--surface);
+      padding: 9px 10px 9px 12px;
+      border: none;
+      background: none;
       color: var(--text);
       font: inherit;
       font-size: 16px;   /* 16px or more: iPhone doesn't zoom in on focus */
       line-height: 1.35;
     }
-    .type-bar textarea:focus { outline: none; border-color: var(--accent); }
+    .type-bar textarea:focus { outline: none; }
     .type-bar textarea::placeholder { color: var(--faint); }
-    .type-bar .icon-btn { width: 42px; height: 42px; flex: none; }
-    .controls { display: flex; align-items: center; justify-content: center; gap: 32px; }
-    .controls .icon-btn { width: 46px; height: 46px; }
+    .type-bar .send-btn { width: 40px; height: 40px; flex: none; background: none; border-color: transparent; }
+    .type-bar .send-btn:hover { background: var(--surface-2); }
+    /* Nothing typed: the send arrow steps aside and the mic is the one action. */
+    .type-bar:has(textarea:placeholder-shown) .send-btn { display: none; }
 
     #talk {
       position: relative;
-      width: 84px; height: 84px;
+      flex: none;
+      width: 40px; height: 40px;
       display: grid;
       place-items: center;
       padding: 0;
@@ -287,7 +377,7 @@
       -webkit-touch-callout: none;
       touch-action: none;
     }
-    #talk svg { width: 32px; height: 32px; }
+    #talk svg { width: 19px; height: 19px; }
     #talk:active { transform: scale(.95); }
     #talk.listening {
       background: var(--st-listen);
@@ -300,7 +390,7 @@
     #talk.thinking::after {
       content: "";
       position: absolute;
-      inset: -7px;
+      inset: -4px;
       border-radius: 50%;
       border: 2px solid transparent;
       border-top-color: var(--st-think);
@@ -315,17 +405,14 @@
     /* Flat rings (solid colour fading out), no glows. */
     @keyframes pulse {
       from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--st-listen) 55%, transparent); }
-      to   { box-shadow: 0 0 0 24px color-mix(in srgb, var(--st-listen) 0%, transparent); }
+      to   { box-shadow: 0 0 0 12px color-mix(in srgb, var(--st-listen) 0%, transparent); }
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    @keyframes breathe { 50% { transform: scale(1.06); box-shadow: 0 0 0 10px color-mix(in srgb, var(--st-speak) 22%, transparent); } }
-    .talk-label { margin-top: 10px; text-align: center; font-size: 13.5px; color: var(--muted); }
+    @keyframes breathe { 50% { transform: scale(1.06); box-shadow: 0 0 0 6px color-mix(in srgb, var(--st-speak) 22%, transparent); } }
 
     @media (min-width: 768px) {
-      .top { padding: 22px 24px 14px; }
-      #scroller { padding: 8px 24px 24px; }
+      #scroller { padding: 24px 24px 24px; }
       #transcript li.assistant { font-size: 17px; }
-      #talk { width: 92px; height: 92px; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -341,7 +428,7 @@
       border: 1px solid var(--border);
       border-radius: 22px;
     }
-    dialog::backdrop { background: rgba(10, 9, 5, .6); }
+    dialog::backdrop { background: rgba(8, 10, 14, .6); }
     @media (max-width: 640px) {
       dialog {
         width: 100%;
@@ -485,58 +572,76 @@
 </head>
 <body data-phase="idle">
   <div class="app">
-    <header class="top">
-      <div class="brand"><span class="dot"></span>Pace</div>
-      <div class="top-actions">
-        <button id="modeBtn" class="pill" type="button">Hands-free</button>
-        <button id="filesBtn" class="icon-btn" type="button" aria-label="Files">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-        </button>
-        <button id="historyBtn" class="icon-btn" type="button" aria-label="Chat history">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
-        </button>
-        <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        </button>
-      </div>
-    </header>
-
-    <div id="status" role="status" aria-live="polite"></div>
-
-    <main id="scroller">
-      <div class="empty">
-        <h2>What are we building?</h2>
-        <p>Tap the mic and talk. Claude answers out loud and builds what you ask for: in files kept in this browser (the folder icon above), or in your GitHub repo once one is connected in Settings.</p>
-      </div>
-      <!-- Finished lines (yours and Claude's) get added here -->
-      <ol id="transcript"></ol>
-    </main>
-
-    <footer class="dock">
-      <!-- What is being heard right now -->
-      <div id="live" aria-live="polite" data-placeholder=""></div>
-      <!-- Typing works in every browser, and the keyboard's own mic key dictates into it
-           (the way to talk to Pace in Chrome on iPhone, which has no speech recognition). -->
-      <form id="typeForm" class="type-bar" autocomplete="off">
-        <textarea id="typeInput" rows="1" enterkeyhint="send" spellcheck="false" autocapitalize="sentences"
-          aria-label="Message" placeholder="Type, or tap the keyboard's mic to dictate"></textarea>
-        <button id="typeSend" class="icon-btn" type="submit" aria-label="Send">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-        </button>
-      </form>
-      <div class="controls">
-        <button id="copy" class="icon-btn" type="button" aria-label="Copy conversation">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        </button>
-        <button id="talk" type="button" aria-label="Start conversation">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
-        </button>
-        <button id="clear" class="icon-btn" type="button" aria-label="New conversation">
+    <!-- Sidebar: Lifeline projects, each with its saved chats. A drawer on phones. -->
+    <aside id="sidebar" class="sidebar" aria-label="Projects and chats">
+      <div class="side-head">
+        <div class="brand"><span class="dot"></span>Pace</div>
+        <button id="clear" class="icon-btn" type="button" aria-label="New chat" title="New chat">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
         </button>
       </div>
-      <div id="talkLabel" class="talk-label"></div>
-    </footer>
+      <div class="side-body">
+        <div class="side-label">
+          <span>Projects</span>
+          <button id="refreshProjects" class="icon-btn small" type="button" aria-label="Refresh projects from Lifeline" title="Refresh projects">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></svg>
+          </button>
+        </div>
+        <p id="projectsHint" class="hint side-hint" hidden></p>
+        <ul id="projectTree" class="tree"></ul>
+      </div>
+      <div class="side-foot">
+        <button id="modeBtn" class="pill" type="button">Hands-free</button>
+        <span class="side-foot-gap"></span>
+        <button id="historyBtn" class="icon-btn" type="button" aria-label="All chats" title="All chats">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
+        </button>
+        <button id="copy" class="icon-btn" type="button" aria-label="Copy conversation" title="Copy conversation">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button id="filesBtn" class="icon-btn" type="button" aria-label="Files" title="Files">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        </button>
+        <button id="settingsBtn" class="icon-btn" type="button" aria-label="Settings" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </aside>
+    <div id="scrim" class="scrim"></div>
+
+    <div class="main">
+      <button id="menuBtn" class="icon-btn menu-btn" type="button" aria-label="Projects and chats" aria-controls="sidebar" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>
+      </button>
+
+      <div id="status" role="status" aria-live="polite"></div>
+
+      <main id="scroller">
+        <div class="empty">
+          <h2 id="emptyTitle">What are we building?</h2>
+        </div>
+        <!-- Finished lines (yours and Claude's) get added here -->
+        <ol id="transcript"></ol>
+      </main>
+
+      <footer class="dock">
+        <!-- What is being heard right now -->
+        <div id="live" aria-live="polite" data-placeholder=""></div>
+        <!-- Typing works in every browser, and the keyboard's own mic key dictates into it
+             (the way to talk to Pace in Chrome on iPhone, which has no speech recognition). -->
+        <form id="typeForm" class="type-bar" autocomplete="off">
+          <textarea id="typeInput" rows="1" enterkeyhint="send" spellcheck="false" autocapitalize="sentences"
+            aria-label="Message" placeholder="Message Pace"></textarea>
+          <button id="typeSend" class="icon-btn send-btn" type="submit" aria-label="Send">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+          </button>
+          <button id="talk" type="button" aria-label="Start conversation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
+          </button>
+        </form>
+        <div id="talkLabel" class="sr-only"></div>
+      </footer>
+    </div>
   </div>
 
   <!-- Settings. Everything here is stored only in this browser. -->
@@ -845,7 +950,7 @@
   <script>
     // Show startup errors on screen: phones have no console to look at.
     (() => {
-      const BUILD = '2026-11-26a';
+      const BUILD = '2026-11-26b';
       const seen = [];
       const say = (msg) => {          // keeps every message, so a later one can't hide the first
         seen.push(msg);
@@ -1064,6 +1169,16 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
             'not start.'
           : 'Pace only lets you read Lifeline. If the user asks to change something, say that writing is turned ' +
             'off in Pace\'s settings.');
+    }
+
+    // The Lifeline project this chat is filed under (picked in the sidebar).
+    let currentProject = (() => { try { return JSON.parse(store.get('pace-project') || 'null'); } catch { return null; } })();
+    function projectPrompt() {
+      if (!currentProject) return '';
+      return '\n\nThis chat is filed under the user\'s Lifeline project "' + currentProject.name + '" (id ' +
+        currentProject.id + '). Assume questions are about it unless the user says otherwise, and look at it with ' +
+        'context_for, list_docs and read_doc when you need context. When the chat ends, Pace saves its important ' +
+        'points to that project\'s "Pace notes" doc by itself, so only write them to Lifeline yourself when asked.';
     }
 
     // Tools available in both modes.
@@ -1480,7 +1595,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         max_tokens: 64000,
         stream: true,
         system: BASE_PROMPT + (codingOn() ? codingPrompt(gh.repo, gh.branch) : LOCAL_PROMPT) + EXTRAS_PROMPT +
-          SPOKEN_CODE_PROMPT + languagePrompt() + (lifelineOn() ? lifelinePrompt() : '') +
+          SPOKEN_CODE_PROMPT + languagePrompt() + (lifelineOn() ? lifelinePrompt() + projectPrompt() : '') +
           (conventionsText() ? conventionsPrompt(conventionsText()) : '') +
           (writeMode === 'dictate' ? DICTATION_PROMPT : ''),
         // Reasoning stays hidden; short progress notes between tool calls come back as text.
@@ -3306,6 +3421,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       await saveSecrets();
       settingsEl.close();
 
+      const llChanged = before.split('|')[4] !== lifeline.url;
+      if (llChanged) { store.del(PROJECTS_KEY); projects = []; if (!lifelineOn()) setProject(null); refreshProjects(); }
       if (before !== toolsKey()) {
         clearConversation();
         resetBranches();
@@ -3866,8 +3983,10 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       }
       const id = chatId;
       const first = log.find((l) => l.role === 'user') || log[0];
+      const project = currentProject;
       const payload = JSON.stringify({ title: first.text.slice(0, 80), repo: macSession ? '' : gh.repo, created: chatCreated, log, history,
-        mac: macSession });
+        mac: macSession, projectId: project ? project.id : '', projectName: project ? project.name : '' });
+      noteChatInIndex({ id, updated: Date.now(), title: first.text.slice(0, 80), projectId: project ? project.id : '', projectName: project ? project.name : '' });
       return (async () => {
         const key = await getDataKey();
         const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -3901,8 +4020,9 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     }
 
     function restoreChat(id, chat) {
-      flushSave();
       clearConversation();
+      if (chat.projectId) setProject({ id: chat.projectId, name: chat.projectName || 'Project' });
+      else setProject(null);
       restoring = true;
       try {
         (chat.log || []).forEach((l) => addLine(l.role, l.text, l.url));
@@ -3914,6 +4034,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       macSession = chat.mac || null;
       chatId = id;
       chatCreated = chat.created || Date.now();
+      renderSidebar();
       const moved = chat.repo && chat.repo !== gh.repo;
       showStatus('Picked up where you left off.' +
         (moved ? ' This chat was in ' + chat.repo + '; you’re connected to ' + (gh.repo || 'no repo') + ' now.' : ''));
@@ -3950,7 +4071,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         meta.textContent = formatWhen(rec.updated) + (chat.mac ? ' · Mac' : chat.repo ? ' · ' + chat.repo.split('/').pop() : '') +
           (rec.id === chatId ? ' · open now' : '');
         open.append(title, meta);
-        open.addEventListener('click', () => { historyEl.close(); restoreChat(rec.id, chat); });
+        open.addEventListener('click', () => { historyEl.close(); closeSidebar(); restoreChat(rec.id, chat); });
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'icon-btn';
@@ -3959,6 +4080,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         del.addEventListener('click', async () => {
           await chatStore.del(rec.id);
           if (rec.id === chatId) chatId = null;
+          chatIndex.delete(rec.id);
+          renderSidebar();
           li.remove();
           if (!list.querySelector('li')) { empty.textContent = 'No saved chats yet.'; empty.hidden = false; }
         });
@@ -3977,6 +4100,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       saveTimer = null;
       await chatStore.clear().catch(() => {});
       chatId = null;
+      chatIndex.clear();
+      renderSidebar();
       historyEl.close();
       showStatus('Chat history deleted from this browser.');
     });
@@ -3986,6 +4111,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       if (turnAbort) turnAbort.cleared = true;
       stopConversation();
       flushSave();             // the chat you're leaving is kept in history
+      saveTakeaways();         // and its important points go to Lifeline
       if (macSession) endMacChat(macSession);   // the Mac writes its "last time" note
       macSession = null;
       chatId = null;
@@ -3997,7 +4123,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       liveEl.textContent = '';
       showStatus('');
     }
-    $('clear').addEventListener('click', clearConversation);
+    $('clear').addEventListener('click', () => { clearConversation(); renderSidebar(); closeSidebar(); $('typeInput').focus(); });
 
     async function copyText(text) {
       try {
@@ -4020,6 +4146,331 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       showStatus('Copied ' + lines.length + ' line(s) to the clipboard.');
     });
 
+
+    window.__paceAt = 'Sidebar: Lifeline projects and their chats';
+    // =====================================================================
+    // Sidebar: Lifeline projects and their chats. Pace asks for the project list
+    // through the same Anthropic MCP connector Claude uses (a small, cheap model
+    // calls list_projects), so the page still talks only to Anthropic and GitHub.
+    // The list is kept encrypted in this browser and refreshed every few hours.
+    // =====================================================================
+    const HELPER_MODEL = 'claude-haiku-5-5';
+    const PROJECTS_KEY = 'pace-ll-projects';
+    const PROJECTS_MAX_AGE = 6 * 60 * 60 * 1000;
+    const TAKEAWAYS_DOC = 'Pace notes';
+    const chatIndex = new Map();   // id -> { id, updated, title, projectId }
+    let projects = [];             // [{ id, name, parent_ids }]
+    let projectsAt = 0, projectsLoading = false, projectsError = '';
+    let expanded = new Set((() => { try { return JSON.parse(store.get('pace-side-open') || '[]'); } catch { return []; } })());
+    const sidebarEl = $('sidebar'), treeEl = $('projectTree'), projectsHint = $('projectsHint');
+
+    // ---- Drawer on phones ----
+    function openSidebar() { document.body.classList.add('side-open'); $('menuBtn').setAttribute('aria-expanded', 'true'); }
+    function closeSidebar() { document.body.classList.remove('side-open'); $('menuBtn').setAttribute('aria-expanded', 'false'); }
+    $('menuBtn').addEventListener('click', () => (document.body.classList.contains('side-open') ? closeSidebar() : openSidebar()));
+    $('scrim').addEventListener('click', closeSidebar);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSidebar(); });
+
+    // ---- The project this chat is filed under ----
+    function setProject(p) {
+      currentProject = p ? { id: p.id, name: p.name } : null;
+      if (currentProject) store.set('pace-project', JSON.stringify(currentProject)); else store.del('pace-project');
+      $('emptyTitle').textContent = currentProject ? currentProject.name : 'What are we building?';
+      $('typeInput').placeholder = currentProject ? 'Message Pace about ' + currentProject.name : 'Message Pace';
+    }
+    function pickProject(p) {
+      const same = (p ? p.id : '') === (currentProject ? currentProject.id : '');
+      if (!same) {
+        if (log.length) clearConversation();   // a new chat for the new project; the old one is saved
+        setProject(p);
+      }
+      if (p) expanded.add(p.id);
+      saveExpanded();
+      renderSidebar();
+      closeSidebar();
+    }
+    const saveExpanded = () => store.set('pace-side-open', JSON.stringify([...expanded].slice(-40)));
+
+    // ---- Small encrypted values in localStorage (same data key as the chats) ----
+    async function putSecretJSON(key, value) {
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await getDataKey(), new TextEncoder().encode(JSON.stringify(value)));
+      store.set(key, b64e(iv) + '.' + b64e(data));
+    }
+    async function getSecretJSON(key) {
+      const raw = store.get(key);
+      if (!raw) return null;
+      const [iv, data] = raw.split('.');
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(iv) }, await getDataKey(), b64d(data));
+      return JSON.parse(new TextDecoder().decode(plain));
+    }
+
+    // ---- One small request to Claude with only the named Lifeline tools ----
+    async function lifelineHelper({ system, user, tools, maxTokens = 1024 }) {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': API_VERSION,
+          'anthropic-dangerous-direct-browser-access': 'true',
+          'anthropic-beta': 'mcp-client-2025-11-20',
+        },
+        body: JSON.stringify({
+          model: HELPER_MODEL,
+          max_tokens: maxTokens,
+          system,
+          messages: [{ role: 'user', content: user }],
+          mcp_servers: [{ type: 'url', url: lifeline.url, name: 'lifeline', ...(lifeline.token ? { authorization_token: lifeline.token } : {}) }],
+          tools: [{
+            type: 'mcp_toolset', mcp_server_name: 'lifeline',
+            default_config: { enabled: false },
+            configs: Object.fromEntries(tools.map((name) => [name, { enabled: true }])),
+          }],
+        }),
+      });
+      if (!res.ok) throw apiError(res.status, await res.json().catch(() => ({})));
+      return res.json();
+    }
+    const resultText = (b) => (Array.isArray(b.content) ? b.content.map((c) => c.text || '').join('') : String(b.content || ''));
+
+    async function refreshProjects() {
+      if (!lifelineOn() || !apiKey || projectsLoading || isLocked()) { renderSidebar(); return; }
+      projectsLoading = true;
+      $('refreshProjects').classList.add('spinning');
+      renderSidebar();
+      try {
+        const msg = await lifelineHelper({
+          system: 'Call the lifeline list_projects tool exactly once with {"status": "in_progress"}. Then reply with the single word: done.',
+          user: 'List my projects.',
+          tools: ['list_projects'],
+          maxTokens: 400,
+        });
+        const result = (msg.content || []).find((b) => b.type === 'mcp_tool_result');
+        if (!result) throw new Error('Lifeline didn’t return the project list.');
+        if (result.is_error) throw new Error(resultText(result).slice(0, 160) || 'Lifeline refused the request.');
+        const list = JSON.parse(resultText(result));
+        projects = list.filter((p) => p && p.id && p.name && !p.archived_at)
+          .map((p) => ({ id: p.id, name: p.name, parent_ids: p.parent_ids || [] }));
+        projectsAt = Date.now();
+        await putSecretJSON(PROJECTS_KEY, { at: projectsAt, projects });
+        // Keep the open project's name current (it may have been renamed).
+        if (currentProject) { const p = projects.find((x) => x.id === currentProject.id); if (p) setProject(p); }
+        projectsError = '';
+      } catch (err) {
+        projectsError = 'Couldn’t load projects: ' + (err.message || err);
+      } finally {
+        projectsLoading = false;
+        $('refreshProjects').classList.remove('spinning');
+        renderSidebar();
+      }
+    }
+    $('refreshProjects').addEventListener('click', refreshProjects);
+
+    async function loadChatIndex() {
+      chatIndex.clear();
+      let recs = [];
+      try { recs = await chatStore.all(); } catch { return; }
+      for (const rec of recs) {
+        try {
+          const chat = await openChatRecord(rec);
+          chatIndex.set(rec.id, { id: rec.id, updated: rec.updated, title: chat.title || 'Untitled', projectId: chat.projectId || '', projectName: chat.projectName || '' });
+        } catch { /* from a key that's gone */ }
+      }
+    }
+    let sideTimer = null;
+    function noteChatInIndex(entry) {
+      const old = chatIndex.get(entry.id);
+      chatIndex.set(entry.id, entry);
+      if (!old || old.title !== entry.title || old.projectId !== entry.projectId) {
+        clearTimeout(sideTimer);
+        sideTimer = setTimeout(renderSidebar, 300);
+      }
+    }
+
+    async function initSidebar() {
+      setProject(currentProject);
+      try {
+        const cached = await getSecretJSON(PROJECTS_KEY);
+        if (cached) { projects = cached.projects || []; projectsAt = cached.at || 0; }
+      } catch { projects = []; }
+      await loadChatIndex();
+      renderSidebar();
+      if (lifelineOn() && apiKey && Date.now() - projectsAt > PROJECTS_MAX_AGE) refreshProjects();
+    }
+
+    async function openChatById(id) {
+      const rec = (await chatStore.all().catch(() => [])).find((r) => r.id === id);
+      if (!rec) return;
+      try { restoreChat(id, await openChatRecord(rec)); } catch { showStatus('That chat can’t be opened any more.', true); }
+      closeSidebar();
+    }
+
+    const CARET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+    function renderSidebar() {
+      projectsHint.hidden = true;
+      if (!lifelineOn()) {
+        projectsHint.textContent = 'Connect Lifeline in Settings to file chats under your projects.';
+        projectsHint.hidden = false;
+      } else if (!apiKey) {
+        projectsHint.textContent = 'Add your Anthropic key in Settings to load your Lifeline projects.';
+        projectsHint.hidden = false;
+      } else if (projectsError) {
+        projectsHint.textContent = projectsError;
+        projectsHint.hidden = false;
+      } else if (!projects.length && projectsLoading) {
+        projectsHint.textContent = 'Loading projects from Lifeline…';
+        projectsHint.hidden = false;
+      }
+      $('refreshProjects').hidden = !lifelineOn();
+
+      // Chats grouped by project, newest first.
+      const byProject = new Map();
+      for (const c of [...chatIndex.values()].sort((a, b) => b.updated - a.updated)) {
+        if (!byProject.has(c.projectId)) byProject.set(c.projectId, []);
+        byProject.get(c.projectId).push(c);
+      }
+      // Tree: each project sits under its first parent that's also in the list.
+      const ids = new Set(projects.map((p) => p.id));
+      const kids = new Map();
+      for (const p of projects) {
+        const parent = (p.parent_ids || []).find((id) => ids.has(id) && id !== p.id) || '';
+        if (!kids.has(parent)) kids.set(parent, []);
+        kids.get(parent).push(p);
+      }
+      const byName = (a, b) => a.name.replace(/^\W+/u, '').localeCompare(b.name.replace(/^\W+/u, ''));
+      // A chat's project may have finished or been dropped from the list; keep its chats findable.
+      for (const pid of byProject.keys()) {
+        if (pid && !ids.has(pid)) {
+          if (!kids.has('')) kids.set('', []);
+          kids.get('').push({ id: pid, name: byProject.get(pid)[0].projectName || 'Earlier project', parent_ids: [] });
+          ids.add(pid);
+        }
+      }
+      // Projects with chats float to the top, then the rest alphabetically.
+      const recent = (p) => { const list = byProject.get(p.id); return list ? list[0].updated : 0; };
+      const sortRoots = (a, b) => (recent(b) - recent(a)) || byName(a, b);
+
+      const chatList = (list) => {
+        const ul = document.createElement('ul');
+        for (const c of list.slice(0, 20)) {
+          const li = document.createElement('li');
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'chat-item';
+          if (c.id === chatId) b.setAttribute('aria-current', 'true');
+          b.textContent = c.title + ' ';
+          const when = document.createElement('span');
+          when.className = 'when';
+          when.textContent = '· ' + formatWhen(c.updated);
+          b.appendChild(when);
+          b.addEventListener('click', () => openChatById(c.id));
+          li.appendChild(b);
+          ul.appendChild(li);
+        }
+        return ul;
+      };
+
+      const node = (p, depth) => {
+        const li = document.createElement('li');
+        const row = document.createElement('div');
+        row.className = 'tree-row' + ((currentProject ? currentProject.id : '') === p.id ? ' current' : '');
+        const children = (kids.get(p.id) || []).slice().sort(byName);
+        const chats = byProject.get(p.id) || [];
+        const open = expanded.has(p.id);
+        const caret = document.createElement('button');
+        caret.type = 'button';
+        caret.className = 'caret' + (children.length || chats.length ? '' : ' none');
+        caret.innerHTML = CARET;
+        caret.setAttribute('aria-expanded', String(open));
+        caret.setAttribute('aria-label', (open ? 'Collapse ' : 'Expand ') + p.name);
+        caret.addEventListener('click', () => { open ? expanded.delete(p.id) : expanded.add(p.id); saveExpanded(); renderSidebar(); });
+        const name = document.createElement('button');
+        name.type = 'button';
+        name.className = 'proj-name';
+        name.textContent = p.name;
+        name.title = 'New chat in ' + p.name;
+        name.addEventListener('click', () => pickProject(p.id ? p : null));
+        row.append(caret, name);
+        if (chats.length) {
+          const n = document.createElement('span');
+          n.className = 'proj-count';
+          n.textContent = chats.length;
+          row.appendChild(n);
+        }
+        li.appendChild(row);
+        if (open) {
+          if (chats.length) li.appendChild(chatList(chats));
+          if (children.length && depth < 8) {
+            const ul = document.createElement('ul');
+            for (const c of children) ul.appendChild(node(c, depth + 1));
+            li.appendChild(ul);
+          }
+        }
+        return li;
+      };
+
+      treeEl.textContent = '';
+      // Chats not filed under a project.
+      const loose = byProject.get('') || [];
+      if (loose.length || !projects.length) {
+        const none = { id: '', name: 'No project', parent_ids: [] };
+        treeEl.appendChild(node(none, 0));
+      }
+      for (const p of (kids.get('') || []).slice().sort(sortRoots)) treeEl.appendChild(node(p, 0));
+    }
+
+    window.__paceAt = 'Takeaways: when you leave a chat';
+    // =====================================================================
+    // Takeaways: when you leave a chat (new chat, another project, an old chat),
+    // a small model picks out what's worth keeping (decisions, conclusions,
+    // to-dos, ideas) and appends it to the project's "Pace notes" doc in Lifeline.
+    // Only new lines since the last save are sent. Needs Lifeline writes on.
+    // =====================================================================
+    const takeawayMarks = (() => { try { return JSON.parse(store.get('pace-takeaways') || '{}'); } catch { return {}; } })();
+    function saveTakeaways() {
+      if (!chatId || !currentProject || !lifelineOn() || !lifeline.writes || !apiKey) return;
+      const id = chatId, project = currentProject;
+      const from = takeawayMarks[id] || 0;
+      const fresh = log.slice(from).filter((l) => l.role === 'user' || l.role === 'assistant');
+      const said = fresh.filter((l) => l.role === 'user').reduce((n, l) => n + l.text.length, 0);
+      if (fresh.filter((l) => l.role === 'user').length < 2 && said < 200) return;   // too little to be worth it
+      const title = ((log.find((l) => l.role === 'user') || {}).text || 'Chat').slice(0, 80);
+      takeawayMarks[id] = log.length;
+      store.set('pace-takeaways', JSON.stringify(takeawayMarks));
+      let transcript = fresh.map((l) => (l.role === 'user' ? 'User: ' : 'Claude: ') + l.text).join('\n\n');
+      if (transcript.length > 60000) transcript = '…' + transcript.slice(-60000);
+      const today = new Date().toLocaleDateString('en-CA');   // YYYY-MM-DD
+      lifelineHelper({
+        system:
+          'You keep notes for the user\'s Lifeline project "' + project.name + '" (id ' + project.id + '). Below is part ' +
+          'of a voice chat they had with Claude in Pace. Decide whether it holds anything worth keeping: decisions, ' +
+          'conclusions, things learned, to-dos, open questions or ideas. Small talk, dictated code and routine ' +
+          'commands are not worth keeping. If nothing is, reply exactly NONE and call no tools.\n\n' +
+          'Otherwise: call list_docs with project_id ' + project.id + ' and look for a doc titled "' + TAKEAWAYS_DOC + '". ' +
+          'If it exists, call update_doc with its doc_id and `append`; if not, call create_doc with project_id ' +
+          project.id + ', title "' + TAKEAWAYS_DOC + '" and the entry as body. The entry is markdown:\n' +
+          '## ' + today + ' · <a short title for the chat>\n- <2 to 6 short bullets, each one complete thought>\n\n' +
+          'Change nothing else in Lifeline. Finish with one line: SAVED <number of bullets>.',
+        user: 'Chat (started with: "' + title + '"):\n\n' + transcript,
+        tools: ['list_docs', 'update_doc', 'create_doc'],
+        maxTokens: 1500,
+      }).then((msg) => {
+        const text = (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join(' ');
+        const failed = (msg.content || []).find((b) => b.type === 'mcp_tool_result' && b.is_error);
+        const wrote = (msg.content || []).some((b) => b.type === 'mcp_tool_use' && /update_doc|create_doc/.test(b.name));
+        if (failed) throw new Error(resultText(failed).slice(0, 160));
+        if (wrote) {
+          const n = (text.match(/SAVED\s+(\d+)/) || [])[1];
+          showStatus('Saved ' + (n ? n + ' takeaway' + (n === '1' ? '' : 's') : 'takeaways') + ' to ' + TAKEAWAYS_DOC + ' in ' + project.name + '.');
+        }
+      }).catch((err) => {
+        delete takeawayMarks[id];   // try again next time
+        store.set('pace-takeaways', JSON.stringify(takeawayMarks));
+        showStatus('Couldn’t save takeaways to Lifeline: ' + (err.message || err), true);
+      });
+    }
+
     window.__paceAt = 'Start up: ask for the passcode first if ';
     // =====================================================================
     // Start up: ask for the passcode first if the keys are locked.
@@ -4027,6 +4478,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     function ready() {
       lockEl.hidden = true;
       setPhase('idle');
+      initSidebar();
       if (pendingMac) {   // saved only now, after unlocking, so it goes into the vault when there is one
         mac.url = location.origin;
         mac.token = pendingMac;
