@@ -4222,7 +4222,9 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         },
         body: JSON.stringify({
           model: HELPER_MODEL,
-          max_tokens: maxTokens,
+          // Haiku thinks before acting by default; leave room for that on top of the reply itself.
+          max_tokens: maxTokens + 2000,
+          output_config: { effort: 'low' },
           system,
           messages: [{ role: 'user', content: user }],
           mcp_servers: [{ type: 'url', url: lifeline.url, name: 'lifeline', ...(lifeline.token ? { authorization_token: lifeline.token } : {}) }],
@@ -4259,8 +4261,16 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
           maxTokens: 400,
         });
         const result = (msg.content || []).find((b) => b.type === 'mcp_tool_result');
-        if (!result) throw new Error('Lifeline didn’t return the project list.');
-        if (result.is_error) throw new Error(resultText(result).slice(0, 160) || 'Lifeline refused the request.');
+        if (!result) {
+          const said = (msg.content || []).filter((b) => b.type === 'text').map((b) => b.text).join(' ').trim();
+          throw new Error('Lifeline wasn’t asked (' + (msg.stop_reason || 'no reason given') + ')' + (said ? ': ' + said.slice(0, 120) : '.'));
+        }
+        if (result.is_error) {
+          const why = resultText(result);
+          throw new Error(/401|unauthori[sz]ed|invalid.?token|expired|forbidden|403/i.test(why)
+            ? 'Lifeline turned down the token. Paste a fresh one in ⚙️ Settings → Lifeline.'
+            : why.slice(0, 160) || 'Lifeline refused the request.');
+        }
         const list = JSON.parse(resultText(result));
         projects = list.filter((p) => p && p.id && p.name && !p.archived_at)
           .map((p) => ({ id: p.id, name: p.name, parent_ids: p.parent_ids || [] }));
