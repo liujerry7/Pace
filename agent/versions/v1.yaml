@@ -1,0 +1,45 @@
+# One file per Pace version, in the same shape as Lyle's version files.
+# Workflow: change one knob at a time, save it as a new version (v2.yaml ...),
+# point agent/config.yaml at it, talk to it for a few sessions, then fill in
+# `rating`. Any version can be switched back to by its file.
+
+name: pace-v1
+date: 2026-11-26
+model: claude-opus-5-5   # note the id exactly: a retired or updated model makes a version drift
+effort: medium           # low | medium | high | xhigh | max. Current models removed `temperature`; effort is the dial now.
+humor: 2                 # 0-5, picks a paragraph from humor_styles below
+prompt_file: prompts/v1.md
+
+# Talking style by input mode. Each message is tagged [spoken] or [typed] by the page,
+# so one session can mix both without changing the system prompt (which would drop the prompt cache).
+modes:
+  voice: >-
+    Short and conversational: one or two sentences, one step or question at a time.
+    Natural spoken fillers are fine. No markdown, lists or headings, because it is read aloud.
+    Expect to be cut off, and follow along without restating what was cut.
+  text: >-
+    Thorough and structured, like a written engineering note: the general idea first, then the specifics.
+    Markdown is fine.
+
+humor_styles:
+  - Strictly business. No jokes.
+  - Dry and rare. A light touch at most once a conversation.
+  - Warm and playful, family-friendly. A light joke now and then (wordplay, a silly observation), never in the way of the task. No roasting.
+  - Playful. Jokes come easily, but the work always comes first.
+  - Very playful. Puns welcome, cheerful running gags.
+  - Jokes constantly, still family-friendly and still getting the work done.
+
+tools:
+  # Run without asking. Everything else (Bash, for one) asks on screen first: "tap Allow".
+  auto_allow: [Read, Glob, Grep, Edit, Write, NotebookEdit, TodoWrite, WebSearch, WebFetch,
+    mcp__pace__remember, mcp__pace__forget]
+  lifeline: true         # connect Lifeline's MCP server when ~/.pace/config.yaml has its URL
+
+memory:
+  # What every chat starts with (the "per Pace" layer, like Claude Code's CLAUDE.md):
+  load: [prompt file, ~/.pace/MEMORY.md, last chat's summary, the folder's CLAUDE.md]
+  # What a chat leaves behind (the "per chat" layer). The full chat is also kept and can be resumed.
+  save_on_end: chat summary (where we left off, loose ends)
+
+notes: First Pace on the Agent SDK. Lyle's voice/text modes and humor level 2.
+rating:   # how talking to it felt (1-5) and why

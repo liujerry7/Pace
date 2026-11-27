@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <!-- Lockdown: no outside scripts, styles or images, and the page can only talk to
        Anthropic and GitHub, so nothing can ship your keys anywhere else. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.anthropic.com https://api.github.com; worker-src blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src 'self' https://api.anthropic.com https://api.github.com http://localhost:* http://127.0.0.1:* https://*.ts.net; worker-src blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#14130e" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f6f1de" media="(prefers-color-scheme: light)">
@@ -645,6 +645,26 @@
         </section>
 
         <section>
+          <h3>Run on your Mac <span class="opt">· optional</span></h3>
+          <p class="hint">Runs Pace on your Mac with Claude Code's engine: it reads, edits and runs code in a folder
+            there, keeps chats you can resume, and remembers things between chats. Start it with <b>npm start</b> in
+            Pace's <b>server</b> folder and open the link it prints, which fills these in. While this is on, the GitHub
+            repo and Lifeline settings above aren't used: the Mac has its own.</p>
+          <div class="field">
+            <label for="macUrlInput">Server</label>
+            <input id="macUrlInput" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="http://localhost:8787">
+          </div>
+          <div class="field">
+            <label for="macTokenInput">Pace token</label>
+            <input id="macTokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="Printed by the server">
+          </div>
+          <div class="field">
+            <label for="macFolderInput">Folder <span class="opt">· blank for the server's default</span></label>
+            <input id="macFolderInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="~/Developer/Projects/Pace">
+          </div>
+        </section>
+
+        <section>
           <h3>Coding conventions</h3>
           <p class="hint">Claude follows these in code it writes and suggests them when you ask for something that
             breaks them. A repo's own CLAUDE.md, CONVENTIONS.md or .clang-format wins. Copied from your Lifeline docs.</p>
@@ -1125,6 +1145,14 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       writes: store.get('pace-lifeline-writes') !== '0',
     };
     const lifelineOn = () => !!lifeline.url;
+    // Pace's server on your Mac (server/server.mjs): Claude Code's engine, local files, resumable chats, memory.
+    const mac = {
+      url:    store.get('pace-mac-url') || '',
+      token:  store.get('pace-mac-token') || '',
+      folder: store.get('pace-mac-folder') || '',
+    };
+    const macOn = () => !!(mac.url && mac.token);
+    let macSession = null;   // the Mac's session id for this chat (resumable)
     let codeLang = store.get('pace-lang') || 'auto';   // auto | cpp | js | python
     // dictate (default): Claude types only the code you say, unless you hand it the pen.
     let writeMode = store.get('pace-write-mode') === 'write' ? 'write' : 'dictate';
@@ -1185,7 +1213,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     // TRANSCRIPT HANDLING — the one place every finished phrase goes.
     // Adds your line to the log, then (if a key is saved) asks Claude.
     // =====================================================================
-    function addTranscriptLine(text) {
+    function addTranscriptLine(text, input = 'spoken') {
       text = text.trim();
       if (!text) return false;
 
@@ -1198,6 +1226,10 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
 
       addLine('user', text);
 
+      if (macOn()) {
+        askMac(text, input);
+        return true;
+      }
       if (!apiKey) {
         if (lines.length === 1) showStatus('No API key saved: transcribing only. Tap ⚙️ Settings to talk with Claude.');
         return false;
@@ -1233,7 +1265,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       if (conversationOn) stopConversation();      // typing takes over from hands-free
       typeInput.value = '';
       fitTypeInput();
-      addTranscriptLine(text);
+      addTranscriptLine(text, 'typed');
     });
 
     // ---- Drawing lines. Everything uses textContent, so nothing from the
@@ -1685,6 +1717,143 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         turnActive = false;
         if (!ctrl.signal.aborted) {
           if (!statusEl.classList.contains('error')) showStatus('');
+          updatePhase();
+        }
+      }
+    }
+
+    // =====================================================================
+    // Pace on your Mac (server/server.mjs). Each turn is one POST; the reply
+    // comes back as server-sent events. The Mac keeps the conversation, so
+    // only the new message and the chat's session id are sent.
+    // =====================================================================
+    const macBase = () => mac.url.replace(/\/+$/, '');
+    function macHeaders() {
+      const h = { 'content-type': 'application/json', authorization: 'Bearer ' + mac.token };
+      if (apiKey) h['x-pace-api-key'] = apiKey;   // used only if the server has no key of its own
+      return h;
+    }
+
+    // Settings from this page that shape how Claude writes code (sent once, when a chat starts).
+    function macPrompt() {
+      const name = { cpp: 'modern C++ (C++20)', js: 'JavaScript', python: 'Python' }[codeLang];
+      return (SPOKEN_CODE_PROMPT +
+        (name ? '\n\nWrite new code and dictated snippets in ' + name + ' unless the user names another language or the project clearly uses one.' : '') +
+        (conventionsText() ? conventionsPrompt(conventionsText()) : '') +
+        (writeMode === 'dictate' ? DICTATION_PROMPT : '')).trim();
+    }
+
+    // Say who's answering: which Pace, where. quiet = only report problems.
+    async function checkMac(announce) {
+      try {
+        const res = await fetch(macBase() + '/api/health', { headers: macHeaders() });
+        const h = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(h.error || 'HTTP ' + res.status);
+        const where = (mac.folder || h.workspace || '').replace(/^\/Users\/[^/]+/, '~');
+        if (announce) addLine('info', 'Connected to Pace on your Mac (' + h.version + '), working in ' + where + '.');
+        else showStatus('Pace on your Mac · ' + where);
+        if (!h.keyOnServer && !apiKey) showStatus('The Mac server needs your Anthropic key: paste it in ⚙️ Settings.', true);
+      } catch (err) {
+        showStatus(macUnreachable(err), true);
+      }
+    }
+
+    function macUnreachable(err) {
+      if (err && err.name === 'TypeError') return 'Can’t reach Pace on your Mac at ' + macBase() + '. Is the server running (npm start in the server folder)?';
+      return 'Pace on your Mac: ' + ((err && err.message) || err);
+    }
+
+    function endMacChat(id) {
+      fetch(macBase() + '/api/end', { method: 'POST', headers: macHeaders(), body: JSON.stringify({ sessionId: id }), keepalive: true })
+        .catch(() => {});
+    }
+
+    async function askMac(text, input) {
+      const ctrl = new AbortController();
+      turnAbort = ctrl;
+      turnActive = true;
+      showStatus('');
+      setPhase('thinking');
+      let failed = false;
+      const fail = (message, spoken) => {
+        failed = true;
+        endSegment();
+        showStatus(message, true);
+        if (spoken) say(spoken);   // you may not be looking at the screen
+      };
+
+      try {
+        const starting = !macSession;
+        const res = await fetch(macBase() + '/api/chat', {
+          method: 'POST',
+          signal: ctrl.signal,
+          headers: macHeaders(),
+          body: JSON.stringify(starting
+            ? { text, input, folder: mac.folder || undefined, extraPrompt: macPrompt() }
+            : { text, input, sessionId: macSession }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 404 && macSession) macSession = null;   // gone from the Mac: the next message starts fresh
+          if (res.status === 401) stopConversation();
+          fail('Pace on your Mac: ' + (data.error || 'HTTP ' + res.status), res.status === 401 ? 'The Mac server didn’t accept my token.' : '');
+          return;
+        }
+
+        const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+        let buf = '';
+        const handle = async (ev) => {
+          switch (ev.type) {
+            case 'session':
+              if (!macSession) addLine('info', 'Working in ' + String(ev.cwd || '').replace(/^\/Users\/[^/]+/, '~') + ' on your Mac.');
+              macSession = ev.id;
+              scheduleSave();
+              break;
+            case 'block': endSegment(); break;
+            case 'text': segAppend('assistant', ev.delta); break;
+            case 'note': segAppend('note', ev.delta); break;
+            case 'tool': endSegment(); addLine('tool', ev.label); break;
+            case 'confirm': {
+              endSegment();
+              const allow = await askConfirm(ev.title, ev.text, 'Allow', ctrl.signal);
+              await fetch(macBase() + '/api/confirm', {
+                method: 'POST', headers: macHeaders(), body: JSON.stringify({ id: ev.id, allow }),
+              }).catch(() => {});
+              addLine('tool', allow ? '✅ Allowed' : '🚫 Not allowed');
+              break;
+            }
+            case 'error': fail(ev.message, 'Something went wrong on the Mac. It’s on the screen.'); break;
+          }
+        };
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buf += value.replace(/\r\n/g, '\n');
+          let i;
+          while ((i = buf.indexOf('\n\n')) !== -1) {
+            const raw = buf.slice(0, i);
+            buf = buf.slice(i + 2);
+            const data = raw.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trimStart()).join('\n');
+            if (!data) continue;
+            let ev;
+            try { ev = JSON.parse(data); } catch { continue; }
+            await handle(ev);
+          }
+        }
+      } catch (err) {
+        if (ctrl.signal.aborted) {
+          if (!ctrl.cleared) addLine('info', 'Interrupted.');
+        } else {
+          stopConversation();   // don't keep listening into a wall
+          fail(macUnreachable(err), 'I can’t reach your Mac right now.');
+        }
+      } finally {
+        endSegment();
+        scheduleSave();
+        if (turnAbort === ctrl) turnAbort = null;
+        turnActive = false;
+        if (!ctrl.signal.aborted) {
+          if (!failed) showStatus('');
           updatePhase();
         }
       }
@@ -2854,7 +3023,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     }
 
     function startConversation() {
-      if (!apiKey) showStatus('No API key saved: I’ll transcribe, but Claude won’t reply. Tap ⚙️ Settings.');
+      if (!apiKey && !macOn()) showStatus('No API key saved: I’ll transcribe, but Claude won’t reply. Tap ⚙️ Settings.');
       else showStatus('Conversation on. Say “stop” to end it.');
       conversationOn = true;
       startListening();
@@ -2966,18 +3135,20 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     async function saveSecrets() {
       if (vaultKey) {
         const iv = crypto.getRandomValues(new Uint8Array(12));
-        const plain = new TextEncoder().encode(JSON.stringify({ apiKey, ghToken: gh.token, lifelineToken: lifeline.token, dataKey: dataKeyRaw }));
+        const plain = new TextEncoder().encode(JSON.stringify({ apiKey, ghToken: gh.token, lifelineToken: lifeline.token, macToken: mac.token, dataKey: dataKeyRaw }));
         const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, vaultKey, plain);
         store.set(VAULT, JSON.stringify({ v: 1, salt: b64e(vaultSalt), iv: b64e(iv), data: b64e(data) }));
         store.del('pace-api-key');
         store.del('pace-gh-token');
         store.del('pace-lifeline-token');
+        store.del('pace-mac-token');
         store.del('pace-data-key');
       } else {
         store.del(VAULT);
         saveOrDelete('pace-api-key', apiKey);
         saveOrDelete('pace-gh-token', gh.token);
         saveOrDelete('pace-lifeline-token', lifeline.token);
+        saveOrDelete('pace-mac-token', mac.token);
         saveOrDelete('pace-data-key', dataKeyRaw);
       }
     }
@@ -2994,6 +3165,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       apiKey = s.apiKey || '';
       gh.token = s.ghToken || '';
       lifeline.token = s.lifelineToken || '';
+      mac.token = s.macToken || '';
       dataKeyRaw = s.dataKey || store.get('pace-data-key') || '';
       dataKeyObj = null;
     }
@@ -3014,6 +3186,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       saveOrDelete('pace-gh-branch', gh.branch === DEFAULT_BRANCH ? '' : gh.branch);
       saveOrDelete('pace-gh-allow-default', gh.allowDefault ? '1' : '');
       saveOrDelete('pace-lifeline-url', lifeline.url);
+      saveOrDelete('pace-mac-url', mac.url);
+      saveOrDelete('pace-mac-folder', mac.folder);
       store.set('pace-lifeline-writes', lifeline.writes ? '1' : '0');
       store.set('pace-lang', codeLang);
       store.set('pace-write-mode', writeMode);
@@ -3041,6 +3215,10 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       $('llTokenInput').value = '';
       $('llTokenInput').placeholder = savedHint(lifeline.token, 'Bearer token');
       $('llWritesInput').checked = lifeline.writes;
+      $('macUrlInput').value = mac.url;
+      $('macTokenInput').value = '';
+      $('macTokenInput').placeholder = savedHint(mac.token, 'Printed by the server');
+      $('macFolderInput').value = mac.folder;
       fillVoiceSelect();
       $('rateInput').value = speechRate;
       showRate();
@@ -3079,6 +3257,12 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         settingsEl.close();
         return;
       }
+      const macUrl = $('macUrlInput').value.trim().replace(/\/+$/, '');
+      if (macUrl && !/^https?:\/\/[^\s/]+$/i.test(macUrl)) {
+        showStatus('The Mac server should look like http://localhost:8787 (no path).', true);
+        settingsEl.close();
+        return;
+      }
       const pass = passInput.value;
       if (pass && pass.length < MIN_PASSCODE) {
         passInput.setCustomValidity('Use at least ' + MIN_PASSCODE + ' characters.');
@@ -3090,13 +3274,17 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       apiKey = keyInput.value.trim() || apiKey;
       effort = effortInput.value;
       // Anything that changes Claude's tools starts a fresh conversation.
-      const toolsKey = () => [gh.repo, gh.extra.join(','), gh.branch, codingOn(), lifeline.url, lifeline.writes, writeMode].join('|');
+      const toolsKey = () => [gh.repo, gh.extra.join(','), gh.branch, codingOn(), lifeline.url, lifeline.writes, writeMode,
+        macOn(), mac.url, mac.folder].join('|');
       const before = toolsKey();
       codeLang = $('langInput').value;
       writeMode = $('writeModeInput').value === 'write' ? 'write' : 'dictate';
       lifeline.url = llUrl;
       lifeline.token = $('llTokenInput').value.trim() || (llUrl ? lifeline.token : '');
       lifeline.writes = $('llWritesInput').checked;
+      mac.url = macUrl;
+      mac.token = $('macTokenInput').value.trim() || (macUrl ? mac.token : '');
+      mac.folder = $('macFolderInput').value.trim();
       gh.repo = repo;
       gh.extra = extra;
       gh.branch = ghBranchInput.value.trim() || DEFAULT_BRANCH;
@@ -3121,11 +3309,14 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       if (before !== toolsKey()) {
         clearConversation();
         resetBranches();
-        if (codingOn()) addLine('info', 'Connected to ' + connectedRepos().join(' and ') + '. Changes go to branch ' + gh.branch + '.');
-        if (lifelineOn()) addLine('info', 'Lifeline connected' + (lifeline.writes ? '.' : ' (read only).'));
+        if (macOn()) checkMac(true);
+        else {
+          if (codingOn()) addLine('info', 'Connected to ' + connectedRepos().join(' and ') + '. Changes go to branch ' + gh.branch + '.');
+          if (lifelineOn()) addLine('info', 'Lifeline connected' + (lifeline.writes ? '.' : ' (read only).'));
+        }
       }
       showStatus(
-        (!apiKey ? 'Saved. No API key, so Pace will only transcribe.' :
+        (macOn() ? 'Saved.' : !apiKey ? 'Saved. No API key, so Pace will only transcribe.' :
           codingOn() ? 'Saved. Claude can now code in ' + gh.repo + '.' : 'Saved.') +
         (pass ? ' Passcode lock is on.' : '')
       );
@@ -3181,16 +3372,17 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     });
 
     $('forgetKey').addEventListener('click', () => {
-      apiKey = ''; gh.token = ''; lifeline.token = '';
+      apiKey = ''; gh.token = ''; lifeline.token = ''; mac.token = '';
       vaultKey = null; vaultSalt = null;
       store.del(VAULT);
       store.del('pace-api-key');
       store.del('pace-gh-token');
       store.del('pace-lifeline-token');
+      store.del('pace-mac-token');
       if (dataKeyRaw) store.set('pace-data-key', dataKeyRaw);   // keep saved chats readable
       settingsEl.close();
       clearConversation();
-      showStatus('API key, GitHub and Lifeline tokens and passcode removed from this browser.');
+      showStatus('API key, GitHub, Lifeline and Mac tokens and passcode removed from this browser.');
     });
 
     window.__paceAt = 'QR code encoder: self-contained, no depe';
@@ -3674,7 +3866,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       }
       const id = chatId;
       const first = log.find((l) => l.role === 'user') || log[0];
-      const payload = JSON.stringify({ title: first.text.slice(0, 80), repo: gh.repo, created: chatCreated, log, history });
+      const payload = JSON.stringify({ title: first.text.slice(0, 80), repo: macSession ? '' : gh.repo, created: chatCreated, log, history,
+        mac: macSession });
       return (async () => {
         const key = await getDataKey();
         const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -3718,6 +3911,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       }
       history.push(...(chat.history || []));
       repairHistory();
+      macSession = chat.mac || null;
       chatId = id;
       chatCreated = chat.created || Date.now();
       const moved = chat.repo && chat.repo !== gh.repo;
@@ -3753,7 +3947,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         title.textContent = chat.title || 'Untitled';
         const meta = document.createElement('span');
         meta.className = 'chat-meta';
-        meta.textContent = formatWhen(rec.updated) + (chat.repo ? ' · ' + chat.repo.split('/').pop() : '') +
+        meta.textContent = formatWhen(rec.updated) + (chat.mac ? ' · Mac' : chat.repo ? ' · ' + chat.repo.split('/').pop() : '') +
           (rec.id === chatId ? ' · open now' : '');
         open.append(title, meta);
         open.addEventListener('click', () => { historyEl.close(); restoreChat(rec.id, chat); });
@@ -3792,6 +3986,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       if (turnAbort) turnAbort.cleared = true;
       stopConversation();
       flushSave();             // the chat you're leaving is kept in history
+      if (macSession) endMacChat(macSession);   // the Mac writes its "last time" note
+      macSession = null;
       chatId = null;
       seg = null;
       lines.length = 0;
@@ -3831,7 +4027,15 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     function ready() {
       lockEl.hidden = true;
       setPhase('idle');
-      if (!apiKey && recognition) showStatus('Tip: tap ⚙️ Settings and paste your Anthropic key so Claude can talk back.');
+      if (pendingMac) {   // saved only now, after unlocking, so it goes into the vault when there is one
+        mac.url = location.origin;
+        mac.token = pendingMac;
+        pendingMac = '';
+        saveSettings();
+        saveSecrets().catch(() => {});
+      }
+      if (macOn()) checkMac(false);
+      else if (!apiKey && recognition) showStatus('Tip: tap ⚙️ Settings and paste your Anthropic key so Claude can talk back.');
       else if (codingOn()) showStatus('Coding in ' + gh.repo + ' (branch ' + gh.branch + ').');
     }
 
@@ -3841,6 +4045,11 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     function stripSetupHash() {
       try { window.history.replaceState(null, '', location.pathname + location.search); }   // `history` is the chat
       catch { try { location.hash = ''; } catch { /* the link stays in the address; it expires anyway */ } }
+    }
+    let pendingMac = '';
+    if ((location.hash || '').startsWith('#mac=') && /^https?:$/.test(location.protocol)) {
+      pendingMac = decodeURIComponent(location.hash.slice(5)).trim();
+      stripSetupHash();
     }
     let pendingSetup = '', handledSetup = '';
     if ((location.hash || '').startsWith(SETUP_PREFIX)) {
@@ -3871,7 +4080,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       lockReset.addEventListener('click', () => {
         if (!armed) { armed = true; lockReset.textContent = 'Tap again to erase your saved keys and chats'; return; }
         store.del(VAULT);
-        apiKey = ''; gh.token = ''; lifeline.token = '';
+        apiKey = ''; gh.token = ''; lifeline.token = ''; mac.token = '';
         dataKeyRaw = ''; dataKeyObj = null;
         chatStore.clear().catch(() => {});   // they can't be decrypted any more
         ready();

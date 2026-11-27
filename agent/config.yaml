@@ -1,0 +1,19 @@
+# Which Pace runs on the Mac server. Modeled on Lyle's "config and versions" doc:
+# a version is fully described by its version file + prompt + what memory gets loaded.
+#
+# Per-machine overrides (folder, port, Lifeline token) go in ~/.pace/config.yaml,
+# which has the same keys and wins over this file. It is never committed.
+
+version: v1            # loads versions/v1.yaml
+
+port: 8787             # the server listens on 127.0.0.1 only; use `tailscale serve` to reach it from a phone
+workspace: ~/Developer/Projects   # default folder Pace works in when a chat doesn't name one
+# Folders Pace may be pointed at (a chat's folder must be inside one of these).
+allowed_roots:
+  - ~/Developer
+
+# Lifeline's MCP server, so Pace can read and add to Lifeline like Lyle does.
+# Put the real URL and token in ~/.pace/config.yaml, not here.
+lifeline:
+  url: ""
+  token: ""
