@@ -950,7 +950,7 @@
   <script>
     // Show startup errors on screen: phones have no console to look at.
     (() => {
-      const BUILD = '2026-11-26b';
+      const BUILD = '2026-11-26c';
       const seen = [];
       const say = (msg) => {          // keeps every message, so a later one can't hide the first
         seen.push(msg);
@@ -1178,7 +1178,8 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       return '\n\nThis chat is filed under the user\'s Lifeline project "' + currentProject.name + '" (id ' +
         currentProject.id + '). Assume questions are about it unless the user says otherwise, and look at it with ' +
         'context_for, list_docs and read_doc when you need context. When the chat ends, Pace saves its important ' +
-        'points to that project\'s "Pace notes" doc by itself, so only write them to Lifeline yourself when asked.';
+        'points to that project\'s "Pace notes" doc and logs the time spent in this chat by itself, so only write ' +
+        'notes or log time for this chat yourself when asked.';
     }
 
     // Tools available in both modes.
@@ -1412,9 +1413,11 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
 
     function scrollToEnd() { scroller.scrollTop = scroller.scrollHeight; }
 
-    function addLine(role, text, url) {
+    // `at`: when the line was said (reopened chats pass their saved time; 0 = unknown).
+    function addLine(role, text, url, at) {
       lines.push(LABELS[role] ? LABELS[role] + ' ' + text : text + (url ? ' ' + url : ''));
-      log.push(url ? { role, text, url } : { role, text });
+      const t = at === undefined ? Date.now() : at;
+      log.push({ role, text, ...(url ? { url } : {}), ...(t ? { t } : {}) });
       scheduleSave();
       const body = makeLine(role);
       renderBody(body, role, text);
@@ -1469,7 +1472,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       scrollToEnd();
       feedSpeech(s, true);
       lines.push((LABELS[s.role] ? LABELS[s.role] + ' ' : '… ') + s.text.trim());
-      log.push({ role: s.role, text: s.text.trim() });
+      log.push({ role: s.role, text: s.text.trim(), t: Date.now() });
       scheduleSave();
     }
 
@@ -4025,7 +4028,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       else setProject(null);
       restoring = true;
       try {
-        (chat.log || []).forEach((l) => addLine(l.role, l.text, l.url));
+        (chat.log || []).forEach((l) => addLine(l.role, l.text, l.url, l.t || 0));
       } finally {
         restoring = false;
       }
@@ -4112,6 +4115,7 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       stopConversation();
       flushSave();             // the chat you're leaving is kept in history
       saveTakeaways();         // and its important points go to Lifeline
+      logChatTime();           // and the time spent goes on the Lifeline calendar
       if (macSession) endMacChat(macSession);   // the Mac writes its "last time" note
       macSession = null;
       chatId = null;
@@ -4231,6 +4235,14 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       });
       if (!res.ok) throw apiError(res.status, await res.json().catch(() => ({})));
       return res.json();
+    }
+    // Takeaways and time both report back; show them together instead of one hiding the other.
+    let llNotes = [], llNotesTimer = null;
+    function lifelineNote(text, isError) {
+      llNotes.push({ text, isError });
+      showStatus(llNotes.map((n) => n.text).join(' '), llNotes.some((n) => n.isError));
+      clearTimeout(llNotesTimer);
+      llNotesTimer = setTimeout(() => { llNotes = []; }, 10000);
     }
     const resultText = (b) => (Array.isArray(b.content) ? b.content.map((c) => c.text || '').join('') : String(b.content || ''));
 
@@ -4462,12 +4474,72 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
         if (failed) throw new Error(resultText(failed).slice(0, 160));
         if (wrote) {
           const n = (text.match(/SAVED\s+(\d+)/) || [])[1];
-          showStatus('Saved ' + (n ? n + ' takeaway' + (n === '1' ? '' : 's') : 'takeaways') + ' to ' + TAKEAWAYS_DOC + ' in ' + project.name + '.');
+          lifelineNote('Saved ' + (n ? n + ' takeaway' + (n === '1' ? '' : 's') : 'takeaways') + ' to ' + TAKEAWAYS_DOC + ' in ' + project.name + '.');
         }
       }).catch((err) => {
         delete takeawayMarks[id];   // try again next time
         store.set('pace-takeaways', JSON.stringify(takeawayMarks));
-        showStatus('Couldn’t save takeaways to Lifeline: ' + (err.message || err), true);
+        lifelineNote('Couldn’t save takeaways to Lifeline: ' + (err.message || err), true);
+      });
+    }
+
+
+    window.__paceAt = 'Time: when you leave a chat';
+    // =====================================================================
+    // Time: when you leave a chat, the time you spent in it goes on the Lifeline
+    // calendar for its project (log_time). Pace works out the sessions itself from
+    // when each line was said: a gap of over 20 minutes starts a new session, and
+    // stretches under a minute are left out. Only time not logged before is sent.
+    // =====================================================================
+    const SESSION_GAP_MS = 20 * 60 * 1000;
+    const MIN_SESSION_MS = 60 * 1000;
+    const timeMarks = (() => { try { return JSON.parse(store.get('pace-time-marks') || '{}'); } catch { return {}; } })();
+    const saveTimeMarks = () => store.set('pace-time-marks', JSON.stringify(timeMarks));
+    // 2026-11-26T14:05:00-06:00 (local time with its offset, as Lifeline wants)
+    function isoLocal(ms) {
+      const d = new Date(ms), pad = (n) => String(Math.abs(n)).padStart(2, '0');
+      const off = -d.getTimezoneOffset();
+      return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' +
+        pad(d.getMinutes()) + ':' + pad(d.getSeconds()) + (off >= 0 ? '+' : '-') + pad(Math.floor(Math.abs(off) / 60)) + ':' + pad(Math.abs(off) % 60);
+    }
+    function chatSessions(entries, after) {
+      const times = entries.map((l) => l.t).filter((t) => t && t > after).sort((a, b) => a - b);
+      const out = [];
+      for (const t of times) {
+        const cur = out[out.length - 1];
+        if (cur && t - cur.end <= SESSION_GAP_MS) cur.end = t;
+        else out.push({ start: t, end: t });
+      }
+      return out.filter((x) => x.end - x.start >= MIN_SESSION_MS);
+    }
+    function logChatTime() {
+      if (!chatId || !currentProject || !lifelineOn() || !lifeline.writes || !apiKey) return;
+      const id = chatId, project = currentProject;
+      const mark = timeMarks[id] || 0;
+      const lastT = Math.max(0, ...log.map((l) => l.t || 0));
+      const sessions = chatSessions(log, mark);
+      if (!sessions.length) return;
+      const title = 'Pace: ' + ((log.find((l) => l.role === 'user') || {}).text || 'chat').slice(0, 120);
+      const calls = sessions.map((x) => ({ project_id: project.id, start: isoLocal(x.start), end: isoLocal(Math.min(x.end, Date.now())), title }));
+      const minutes = Math.round(sessions.reduce((n, x) => n + x.end - x.start, 0) / 60000);
+      timeMarks[id] = lastT;
+      saveTimeMarks();
+      lifelineHelper({
+        system: 'Call the lifeline log_time tool once for each session below, with exactly these arguments and nothing ' +
+          'else. Do not call any other tool. Then reply with the single word: done.',
+        user: calls.map((c) => JSON.stringify(c)).join('\n'),
+        tools: ['log_time'],
+        maxTokens: 300 + 200 * calls.length,
+      }).then((msg) => {
+        const results = (msg.content || []).filter((b) => b.type === 'mcp_tool_result');
+        const failed = results.find((b) => b.is_error);
+        if (failed) throw new Error(resultText(failed).slice(0, 160));
+        if (!results.length) throw new Error('the time wasn’t logged');
+        lifelineNote('Logged ' + minutes + ' min on ' + project.name + '.');
+      }).catch((err) => {
+        if (mark) timeMarks[id] = mark; else delete timeMarks[id];   // try again next time
+        saveTimeMarks();
+        lifelineNote('Couldn’t log time to Lifeline: ' + (err.message || err), true);
       });
     }
 
