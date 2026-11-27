@@ -950,7 +950,7 @@
   <script>
     // Show startup errors on screen: phones have no console to look at.
     (() => {
-      const BUILD = '2026-11-26c';
+      const BUILD = '2026-11-26d';
       const seen = [];
       const say = (msg) => {          // keeps every message, so a later one can't hide the first
         seen.push(msg);
@@ -4512,6 +4512,40 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       }
       return out.filter((x) => x.end - x.start >= MIN_SESSION_MS);
     }
+    // The project, then its parents, nearest first (from the sidebar's project list).
+    function projectChain(project, max = 4) {
+      const chain = [project], seen = new Set([project.id]);
+      let cur = projects.find((p) => p.id === project.id);
+      while (cur && chain.length <= max) {
+        const parent = (cur.parent_ids || []).map((id) => projects.find((p) => p.id === id)).find((p) => p && !seen.has(p.id));
+        if (!parent) break;
+        chain.push({ id: parent.id, name: parent.name });
+        seen.add(parent.id);
+        cur = parent;
+      }
+      return chain;
+    }
+    // Log the sessions on one project. Resolves with the ones Lifeline refused (and why).
+    async function logTimeOn(target, calls) {
+      const args = calls.map((c) => ({ ...c, project_id: target.id }));
+      const msg = await lifelineHelper({
+        system: 'Call the lifeline log_time tool once for each session below, with exactly these arguments and nothing ' +
+          'else. Do not call any other tool. Then reply with the single word: done.',
+        user: args.map((c) => JSON.stringify(c)).join('\n'),
+        tools: ['log_time'],
+        maxTokens: 300 + 200 * args.length,
+      });
+      const content = msg.content || [];
+      const okStarts = new Set(), why = [];
+      for (const use of content.filter((b) => b.type === 'mcp_tool_use' && b.name === 'log_time')) {
+        const res = content.find((b) => b.type === 'mcp_tool_result' && b.tool_use_id === use.id);
+        if (res && !res.is_error) okStarts.add((use.input || {}).start);
+        else if (res) why.push(resultText(res).slice(0, 160));
+      }
+      return { refused: calls.filter((c) => !okStarts.has(c.start)), why: why[0] || 'the time wasn’t logged' };
+    }
+    // When the chat's project can't take time (Lifeline wants a goal above it), try its
+    // parent, then the parent's parent, and say where the time went.
     function logChatTime() {
       if (!chatId || !currentProject || !lifelineOn() || !lifeline.writes || !apiKey) return;
       const id = chatId, project = currentProject;
@@ -4520,25 +4554,37 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
       const sessions = chatSessions(log, mark);
       if (!sessions.length) return;
       const title = 'Pace: ' + ((log.find((l) => l.role === 'user') || {}).text || 'chat').slice(0, 120);
-      const calls = sessions.map((x) => ({ project_id: project.id, start: isoLocal(x.start), end: isoLocal(Math.min(x.end, Date.now())), title }));
-      const minutes = Math.round(sessions.reduce((n, x) => n + x.end - x.start, 0) / 60000);
+      const minutesOf = (list) => Math.round(list.reduce((n, c) => n + c.ms, 0) / 60000);
       timeMarks[id] = lastT;
       saveTimeMarks();
-      lifelineHelper({
-        system: 'Call the lifeline log_time tool once for each session below, with exactly these arguments and nothing ' +
-          'else. Do not call any other tool. Then reply with the single word: done.',
-        user: calls.map((c) => JSON.stringify(c)).join('\n'),
-        tools: ['log_time'],
-        maxTokens: 300 + 200 * calls.length,
-      }).then((msg) => {
-        const results = (msg.content || []).filter((b) => b.type === 'mcp_tool_result');
-        const failed = results.find((b) => b.is_error);
-        if (failed) throw new Error(resultText(failed).slice(0, 160));
-        if (!results.length) throw new Error('the time wasn’t logged');
-        lifelineNote('Logged ' + minutes + ' min on ' + project.name + '.');
-      }).catch((err) => {
-        if (mark) timeMarks[id] = mark; else delete timeMarks[id];   // try again next time
-        saveTimeMarks();
+      (async () => {
+        let left = sessions.map((x) => ({ start: isoLocal(x.start), end: isoLocal(Math.min(x.end, Date.now())), title, ms: x.end - x.start }));
+        let why = '';
+        const placed = [];
+        for (const target of projectChain(project)) {
+          const send = left.map(({ ms, ...c }) => (target.id === project.id ? c : { ...c, title: c.title.replace(/^Pace:/, 'Pace (' + project.name + '):') }));
+          const res = await logTimeOn(target, send);
+          const refusedStarts = new Set(res.refused.map((c) => c.start));
+          const done = left.filter((c) => !refusedStarts.has(c.start));
+          if (done.length) placed.push({ target, minutes: minutesOf(done) });
+          left = left.filter((c) => refusedStarts.has(c.start));
+          why = res.why;
+          if (!left.length) break;
+        }
+        for (const p of placed) {
+          lifelineNote('Logged ' + p.minutes + ' min on ' + p.target.name +
+            (p.target.id === project.id ? '.' : ' (' + project.name + ' has no goal of its own).'));
+        }
+        if (left.length) {
+          const err = new Error(why + (placed.length ? ' (' + minutesOf(left) + ' min not logged)' : ' (tried ' + project.name + ' and the projects above it)'));
+          err.partly = placed.length > 0;   // some went in: don't resend those next time
+          throw err;
+        }
+      })().catch((err) => {
+        if (!err.partly) {
+          if (mark) timeMarks[id] = mark; else delete timeMarks[id];   // try again next time
+          saveTimeMarks();
+        }
         lifelineNote('Couldn’t log time to Lifeline: ' + (err.message || err), true);
       });
     }
