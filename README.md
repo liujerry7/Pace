@@ -53,6 +53,7 @@ Changing the repo, Lifeline URL or the write switch starts a new conversation, b
 ## Install it like an app
 - **iPhone:** open the site in Safari → Share → **Add to Home Screen**. It gets the Pace icon and opens full screen.
 - **Android / desktop Chrome:** menu → **Install app** (or "Add to Home screen").
+- **Offline:** once opened, Pace keeps a copy of itself, so it opens with no connection or a slow one (after 4 seconds it shows the saved copy). Talking to Claude, GitHub and Lifeline still need the internet, and so does voice typing in Chrome. Saved chats and settings are there either way. The offline copy (`sw.js`) never handles your keys or requests to other sites; bump `VERSION` in it if you add files the app needs.
 
 Each install keeps its own saved keys. To copy your setup instead of pasting keys again: on the device that's set up, open ⚙️ Settings → **Send to another device**. Scan the QR code with the other device's camera, open the link, type the 10-character code shown next to the QR, and tap **Set up this device**.
 - The link carries your keys and settings encrypted with that code (AES-256, PBKDF2). It works for 30 minutes, and the encrypted part sits after `#`, which browsers never send to any server.

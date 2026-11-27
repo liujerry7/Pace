@@ -6,7 +6,7 @@
   <meta name="robots" content="noindex, nofollow">
   <!-- Lockdown: no outside scripts, styles or images, and the page can only talk to
        Anthropic and GitHub, so nothing can ship your keys anywhere else. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.anthropic.com https://api.github.com; worker-src blob:; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; manifest-src 'self'; connect-src https://api.anthropic.com https://api.github.com; worker-src blob: 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#14130e" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f6f1de" media="(prefers-color-scheme: light)">
@@ -825,7 +825,7 @@
   <script>
     // Show startup errors on screen: phones have no console to look at.
     (() => {
-      const BUILD = '2026-11-22f';
+      const BUILD = '2026-11-26a';
       const seen = [];
       const say = (msg) => {          // keeps every message, so a later one can't hide the first
         seen.push(msg);
@@ -3894,6 +3894,11 @@ Formatting (clang-format, Microsoft base): 120 columns. Indent 4, with tabs. All
     }
     for (const ev of ['hashchange', 'popstate', 'pageshow', 'load', 'focus']) window.addEventListener(ev, checkSetupHash);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checkSetupHash(); });
+    // Offline: sw.js keeps a copy of Pace's own files so the installed app opens without a
+    // connection. It never handles requests to Anthropic, GitHub or Lifeline.
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('sw.js').catch((err) => console.warn('Offline copy unavailable:', err));
+    }
     window.__paceAt = 'end';
     let setupPolls = 0;
     const setupPoll = setInterval(() => { checkSetupHash(); if (++setupPolls >= 20) clearInterval(setupPoll); }, 250);
